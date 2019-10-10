@@ -49,3 +49,24 @@ def remove_samples_with_label(df, sample_to_label, label_to_remove):
     df = df[keep_columns]
 
     return df
+
+
+def parse_gene_file(gene_file_path):
+    '''Read a list of genes from a file
+
+    Arguments
+    ---------
+    gene_file_path: str
+        The path to the csv file to be read from
+
+    Returns
+    -------
+    genes: list of str
+        The genes found in the file
+    '''
+    with open(gene_file_path, 'r') as gene_file:
+        genes = []
+        for line in gene_file:
+            genes.append(line.strip().strip(','))
+
+    return genes
