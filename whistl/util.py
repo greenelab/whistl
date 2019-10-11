@@ -70,3 +70,57 @@ def parse_gene_file(gene_file_path):
             genes.append(line.strip().strip(','))
 
     return genes
+
+
+def get_class_weights(train_loader):
+    '''Calculate class weights for better training performance on unbalanced data
+
+    Arguments
+    ---------
+    train_loader: pytorch.DataLoader
+        The data loader for a ExpressionDataset containing the labels to calculate weights for
+
+    Returns
+    -------
+    weights: dict
+        A dictionary mapping encoded labels to weights
+    '''
+    value_counts, total = get_value_counts(train_loader)
+
+    # Weight labels according to the inverse of their frequency
+    weights = {}
+    for label in value_counts:
+        weights[label] = 1 - value_counts[label] / total
+
+    return weights
+
+
+def get_value_counts(data_loader):
+    '''Get the number of instances of each label in the dataset
+
+    Arguments
+    ---------
+    data_loader: pytorch.DataLoader
+        The data loader for a ExpressionDataset containing the labels to count
+
+    Returns
+    -------
+    value_counts: dict
+        A dictionary mapping the labels to their number of occurences in the dataset
+    total: int
+        The total number of data points in the dataset
+    '''
+    value_counts = {}
+    total = 0
+
+    # Count number of instances of each label
+    for batch in data_loader:
+        _, labels, _ = batch
+        for label in labels:
+            if int(label) not in value_counts:
+                value_counts[int(label)] = 1
+            else:
+                value_counts[int(label)] += 1
+            total += 1
+
+    return value_counts, total
