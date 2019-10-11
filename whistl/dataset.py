@@ -11,7 +11,7 @@ import util
 class ExpressionDataset(Dataset):
     ''' A dataset to parse data output by refine.bio'''
     def __init__(self, data_dirs, sample_to_label, label_to_encoding, gene_file_path):
-        ''' The dataset constructor function
+        ''' The dataset's constructor function
 
         Arguments
         ---------
@@ -41,6 +41,7 @@ class ExpressionDataset(Dataset):
             curr_df = util.remove_samples_with_label(curr_df, sample_to_label, 'other')
             # Retrieve labels for each sample
             study_labels = util.get_labels(curr_df, sample_to_label, label_to_encoding)
+
             curr_df = curr_df.loc[genes_to_keep, :]
 
             df_list.append(curr_df)
@@ -69,19 +70,15 @@ class ExpressionDataset(Dataset):
             The gene expression information for the sample at index idx
         label: int
             The label for the sample at index idx
+        id_: string
+            The sample identifier for the given sample
         '''
         sample = self.gene_expression.iloc[:, idx].values
         label = np.array(self.labels[idx])
+        id_ = self.gene_expression.columns[idx]
 
-        return sample, label
+        return sample, label, id_
 
     def __len__(self):
-        '''
-
-        Arguments
-        ---------
-
-        Returns
-        -------
-        '''
+        '''Provides the number of samples in the dataset'''
         return len(self.labels)
