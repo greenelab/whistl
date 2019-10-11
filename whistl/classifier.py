@@ -8,9 +8,25 @@ import random
 import sys
 
 import torch
+import torch.nn as nn
+import torch.optim as optim
 from torch.utils.data import DataLoader
 
 import dataset
+import model
+import util
+
+
+def count_correct(output, labels):
+    '''Calculate the number of correct predictions in the given batch'''
+    # This could be more efficient with a hard sigmoid or something,
+    # Performance impact should be negligible though
+    correct = 0
+    predictions = [1 if p > .5 else 0 for p in output]
+    for y, y_hat in zip(predictions, labels):
+        if y == y_hat:
+            correct += 1
+    return correct
 
 
 def parse_map_file(map_file_path):
@@ -66,6 +82,101 @@ def train_tune_split(data_dir, tune_study_count):
     train_dirs = [dir_ for dir_ in data_dirs if dir_ not in tune_dirs]
 
     return train_dirs, tune_dirs
+
+
+def train_model(classifier, train_loader, tune_loader, train_dataset, tune_dataset, num_epochs):
+    ''' Train the provided classifier on the data from train_loader, evaluating the performance
+    along the way with the data from tune_loader
+
+    Arguments
+    ---------
+    classifier: pytorch.nn.Module
+        The model to train
+    train_loader: pytorch.DataLoader
+        An object that loads training data into batches
+    tune_data: pytorch.DataLoader
+        An object that loads tuning data into batches
+    train_dataset: dataset.ExpressionDataset
+        A pytorch Dataset object containing expression data to train the model on
+    tune_dataset: dataset.ExpressionDataset
+        A pytorch Dataset object containing expression data to evaluate the model
+    num_epochs: int
+        The number of times the model should be trained on all the data
+    '''
+    optimizer = optim.Adam(classifier.parameters(), lr=1e-5)
+
+    print('Training with {} training samples'.format(len(train_dataset)))
+    print('Tuning with {} tuning samples'.format(len(tune_dataset)))
+
+    class_weights = util.get_class_weights(train_loader)
+
+    # Calculate baseline tune set prediction accuracy (just pick the largest class)
+    tune_label_counts, _ = util.get_value_counts(tune_loader)
+    baseline = max(list(tune_label_counts.values())) / len(tune_dataset)
+
+    results = {'train_loss': [], 'tune_loss': [], 'train_acc': [], 'tune_acc': [],
+               'baseline': baseline}
+
+    for epoch in range(num_epochs):
+        train_loss = 0
+        train_correct = 0
+        # Set training mode
+        classifier = classifier.train()
+        for batch in train_loader:
+            expression, labels, ids = batch
+            expression = expression.to(device)
+            labels = labels.to(device).double()
+
+            # Get weights to handle the class imbalance
+            batch_weights = [class_weights[int(label)] for label in labels]
+            batch_weights = torch.DoubleTensor(batch_weights).to(device)
+
+            loss_function = nn.BCELoss(weight=batch_weights)
+            optimizer.zero_grad()
+            output = classifier(expression)
+            loss = loss_function(output, labels)
+            train_loss += float(loss)
+
+            train_correct += count_correct(output, labels)
+
+            loss.backward()
+            optimizer.step()
+
+        # Disable the gradient and switch into model evaluation mode
+        with torch.no_grad():
+            classifier = classifier.eval()
+
+            tune_loss = 0
+            tune_correct = 0
+            for tune_batch in tune_loader:
+                expression, labels, ids = tune_batch
+                expression = expression.to(device)
+                tune_labels = labels.to(device).double()
+
+                loss_function = nn.BCELoss()
+
+                tune_output = classifier(expression)
+
+                loss = loss_function(tune_output, tune_labels)
+                tune_loss += float(loss)
+                tune_correct += count_correct(tune_output, tune_labels)
+
+        train_accuracy = train_correct / len(train_dataset)
+        tune_accuracy = tune_correct / len(tune_dataset)
+
+        sys.stderr.write('Epoch {}'.format(epoch) + '\n')
+        sys.stderr.write('Train loss: {}'.format(train_loss / len(train_dataset)) + '\n')
+        sys.stderr.write('Tune loss: {}'.format(tune_loss / len(tune_dataset)) + '\n')
+        sys.stderr.write('Train accuracy: {}'.format(train_accuracy) + '\n')
+        sys.stderr.write('Tune accuracy: {}'.format(tune_accuracy) + '\n')
+        sys.stderr.write('Baseline accuracy: {}'.format(baseline) + '\n')
+
+        results['train_loss'].append(train_loss / len(train_dataset))
+        results['tune_loss'].append(tune_loss / len(tune_dataset))
+        results['train_acc'].append(train_accuracy)
+        results['tune_acc'].append(tune_accuracy)
+
+    return results
 
 
 if __name__ == '__main__':
@@ -129,14 +240,12 @@ if __name__ == '__main__':
     tune_loader = DataLoader(tune_dataset, batch_size=16, shuffle=True, num_workers=2,
                              pin_memory=True)
 
-    for epoch in range(args.num_epochs):
-        for i, batch in enumerate(train_loader):
-            expression, labels = batch
-            expression = expression.to(device)
-            labels = labels.to(device)
-            print(expression.shape)
+    # Get the number of genes in the data
+    input_size = train_dataset[0][0].shape[0]
+    classifier = model.ThreeLayerNet(input_size).double()
 
-        # TODO evaluate tune set error
-        # TODO plot learning curve
-        # TODO handle checkpoints
-        # TODO actually load model
+    results = train_model(classifier, train_loader, tune_loader, train_dataset,
+                          tune_dataset, args.num_epochs)
+
+    # TODO log results to a file
+    # TODO model checkpoints/early stopping
