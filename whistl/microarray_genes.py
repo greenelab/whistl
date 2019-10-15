@@ -25,7 +25,6 @@ test_dirs = [f for f in subfiles if 'GSE' in f and os.path.isdir(f)]
 df_list = []
 for data_dir in train_dirs:
     study = data_dir.rstrip('/').split('/')[-1]
-    print(study)
     study_file_name = study + '.tsv'
     data_file = os.path.join(data_dir, study_file_name)
     curr_df = pd.read_csv(data_file, sep='\t')
@@ -44,7 +43,6 @@ for data_dir in test_dirs:
 
 
 combined_df = pd.concat(df_list, axis=1, join='inner')
-print(len(combined_df.columns))
 
 # Write genes to a file
 combined_df.to_csv('../data/microarray_genes.csv', columns=[], header=False)

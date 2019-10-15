@@ -1,11 +1,11 @@
 '''This script trains a classifier to differentiate between sepsis and healthy gene expresssion'''
 
 import argparse
+import logging
 import numpy as np
 import os
 import pickle
 import random
-import sys
 
 import torch
 import torch.nn as nn
@@ -84,7 +84,8 @@ def train_tune_split(data_dir, tune_study_count):
     return train_dirs, tune_dirs
 
 
-def train_model(classifier, train_loader, tune_loader, train_dataset, tune_dataset, num_epochs):
+def train_model(classifier, train_loader, tune_loader, train_dataset, tune_dataset, num_epochs,
+                device, logger=None):
     ''' Train the provided classifier on the data from train_loader, evaluating the performance
     along the way with the data from tune_loader
 
@@ -102,11 +103,21 @@ def train_model(classifier, train_loader, tune_loader, train_dataset, tune_datas
         A pytorch Dataset object containing expression data to evaluate the model
     num_epochs: int
         The number of times the model should be trained on all the data
+    device: torch.device
+        The device to train the model on (either a gpu or a cpu)
+    logger: logging.logger
+        The python logger object to handle printing logs
+
+    Returns
+    -------
+    results: dict
+        A dictionary containing lists tracking different loss metrics across epochs
     '''
     optimizer = optim.Adam(classifier.parameters(), lr=1e-5)
 
-    print('Training with {} training samples'.format(len(train_dataset)))
-    print('Tuning with {} tuning samples'.format(len(tune_dataset)))
+    if logger is not None:
+        logger.info('Training with {} training samples'.format(len(train_dataset)))
+        logger.info('Tuning with {} tuning samples'.format(len(tune_dataset)))
 
     class_weights = util.get_class_weights(train_loader)
 
@@ -164,12 +175,13 @@ def train_model(classifier, train_loader, tune_loader, train_dataset, tune_datas
         train_accuracy = train_correct / len(train_dataset)
         tune_accuracy = tune_correct / len(tune_dataset)
 
-        sys.stderr.write('Epoch {}'.format(epoch) + '\n')
-        sys.stderr.write('Train loss: {}'.format(train_loss / len(train_dataset)) + '\n')
-        sys.stderr.write('Tune loss: {}'.format(tune_loss / len(tune_dataset)) + '\n')
-        sys.stderr.write('Train accuracy: {}'.format(train_accuracy) + '\n')
-        sys.stderr.write('Tune accuracy: {}'.format(tune_accuracy) + '\n')
-        sys.stderr.write('Baseline accuracy: {}'.format(baseline) + '\n')
+        if logger is not None:
+            logger.info('Epoch {}'.format(epoch))
+            logger.info('Train loss: {}'.format(train_loss / len(train_dataset)))
+            logger.info('Tune loss: {}'.format(tune_loss / len(tune_dataset)))
+            logger.info('Train accuracy: {}'.format(train_accuracy))
+            logger.info('Tune accuracy: {}'.format(tune_accuracy))
+            logger.info('Baseline accuracy: {}'.format(baseline))
 
         results['train_loss'].append(train_loss / len(train_dataset))
         results['tune_loss'].append(tune_loss / len(tune_dataset))
@@ -214,6 +226,10 @@ if __name__ == '__main__':
         # We'll use the default GPU, this will need to change later if using multiple GPUs
         device = torch.device('cuda')
 
+    # Set up a logger to write logs to
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+
     # set random seeds
     # https://pytorch.org/docs/stable/notes/randomness.html
     np.random.seed(args.seed)
@@ -229,23 +245,22 @@ if __name__ == '__main__':
     train_dirs, tune_dirs = train_tune_split(args.data_dir, args.tune_study_count)
     label_to_encoding = {'sepsis': 1, 'healthy': 0}
 
-    sys.stderr.write('Generating training dataset...\n')
+    logger.info('Generating training dataset...')
     train_dataset = dataset.ExpressionDataset(train_dirs, sample_to_label, label_to_encoding,
                                               args.gene_file)
     train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, num_workers=2,
                               pin_memory=True)
-    sys.stderr.write('Generating tuning dataset...\n')
+    logger.info('Generating tuning dataset...')
     tune_dataset = dataset.ExpressionDataset(tune_dirs, sample_to_label, label_to_encoding,
                                              args.gene_file)
-    tune_loader = DataLoader(tune_dataset, batch_size=16, shuffle=True, num_workers=2,
-                             pin_memory=True)
+    tune_loader = DataLoader(tune_dataset, batch_size=16, num_workers=2, pin_memory=True)
 
     # Get the number of genes in the data
     input_size = train_dataset[0][0].shape[0]
     classifier = model.ThreeLayerNet(input_size).double()
 
     results = train_model(classifier, train_loader, tune_loader, train_dataset,
-                          tune_dataset, args.num_epochs)
+                          tune_dataset, args.num_epochs, device, logger)
 
     # TODO log results to a file
     # TODO model checkpoints/early stopping
