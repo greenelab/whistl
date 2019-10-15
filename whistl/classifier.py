@@ -8,6 +8,7 @@ import pickle
 import random
 
 import torch
+import torch.autograd as grad
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
@@ -15,44 +16,6 @@ from torch.utils.data import DataLoader
 import dataset
 import model
 import util
-
-
-def count_correct(output, labels):
-    '''Calculate the number of correct predictions in the given batch'''
-    # This could be more efficient with a hard sigmoid or something,
-    # Performance impact should be negligible though
-    correct = 0
-    predictions = [1 if p > .5 else 0 for p in output]
-    for y, y_hat in zip(predictions, labels):
-        if y == y_hat:
-            correct += 1
-    return correct
-
-
-def parse_map_file(map_file_path):
-    '''Create a sample: label mapping from the pickled file output by label_samples.py
-
-    Arguments
-    ---------
-    map_file_path: str or Path object
-        The path to a pickled file created by label_samples.py
-
-    Returns
-    -------
-    sample_to_label: dict
-        A string to string dict mapping sample ids to their corresponding label string.
-        E.g. {'GSM297791': 'sepsis'}
-    '''
-    sample_to_label = {}
-    label_to_sample = None
-    with open(map_file_path, 'rb') as map_file:
-        label_to_sample, _ = pickle.load(map_file)
-
-    for label in label_to_sample:
-        for sample in label_to_sample[label]:
-            sample_to_label[sample] = label
-
-    return sample_to_label
 
 
 def train_tune_split(data_dir, tune_study_count):
@@ -148,7 +111,7 @@ def train_model(classifier, train_loader, tune_loader, train_dataset, tune_datas
             loss = loss_function(output, labels)
             train_loss += float(loss)
 
-            train_correct += count_correct(output, labels)
+            train_correct += util.count_correct(output, labels)
 
             loss.backward()
             optimizer.step()
@@ -170,7 +133,7 @@ def train_model(classifier, train_loader, tune_loader, train_dataset, tune_datas
 
                 loss = loss_function(tune_output, tune_labels)
                 tune_loss += float(loss)
-                tune_correct += count_correct(tune_output, tune_labels)
+                tune_correct += util.count_correct(tune_output, tune_labels)
 
         train_accuracy = train_correct / len(train_dataset)
         tune_accuracy = tune_correct / len(tune_dataset)
@@ -239,7 +202,7 @@ if __name__ == '__main__':
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-    sample_to_label = parse_map_file(args.map_file)
+    sample_to_label = util.parse_map_file(args.map_file)
 
     # Prepare data
     train_dirs, tune_dirs = train_tune_split(args.data_dir, args.tune_study_count)
