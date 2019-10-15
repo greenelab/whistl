@@ -6,6 +6,7 @@ import torch.nn.functional as F
 
 
 class ThreeLayerNet(nn.Module):
+    '''A simple feed-forward neural network with three layers'''
     def __init__(self, input_size):
         super(ThreeLayerNet, self).__init__()
 
