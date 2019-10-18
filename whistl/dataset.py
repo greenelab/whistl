@@ -71,7 +71,8 @@ class ExpressionDataset(Dataset):
         df_list = []
         labels = []
         for data_dir in data_dirs:
-            curr_df, study_labels = parse_study_dir(data_dir)
+            curr_df, study_labels = parse_study_dir(data_dir, sample_to_label, label_to_encoding,
+                                                    genes_to_keep)
 
             df_list.append(curr_df)
             labels.extend(study_labels)
@@ -133,7 +134,9 @@ class SingleStudyDataset(Dataset):
         gene_file_path: string
             The path to a file containing the genes to use in the dataset
         '''
-        study_df, labels = parse_study_dir(data_dir)
+        genes_to_keep = util.parse_gene_file(gene_file_path)
+        study_df, labels = parse_study_dir(data_dir, sample_to_label, label_to_encoding,
+                                           genes_to_keep)
         assert len(labels) == len(study_df.columns)
 
         labels = np.array(labels)
