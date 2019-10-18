@@ -3,12 +3,9 @@
 import argparse
 import logging
 import numpy as np
-import os
-import pickle
 import random
 
 import torch
-import torch.autograd as grad
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
@@ -16,35 +13,6 @@ from torch.utils.data import DataLoader
 import dataset
 import model
 import util
-
-
-def train_tune_split(data_dir, tune_study_count):
-    '''Split the data directories into train and tune directories
-
-    Arguments
-    ---------
-    data_dir: str or Path
-        The directory containing subdirectories with gene expression data
-    tune_study_count:
-        The number of studies to put in the tuning set
-
-    Returns
-    -------
-    train_dirs: list of strs
-        The directories to be used as training data
-    tune_dirs: list of strs
-        The directories to be used for model tuning
-    '''
-    # List everything in data_dir
-    subfiles = [os.path.join(data_dir, f) for f in os.listdir(data_dir)]
-    # Keep only data directories, not anything else that might be in data_dir
-    data_dirs = [f for f in subfiles if ('SRP' in f or 'GSE' in f) and os.path.isdir(f)]
-
-    # Pull out directories for tuning, then put everything else in train_dirs
-    tune_dirs = random.sample(data_dirs, tune_study_count)
-    train_dirs = [dir_ for dir_ in data_dirs if dir_ not in tune_dirs]
-
-    return train_dirs, tune_dirs
 
 
 def train_model(classifier, train_loader, tune_loader, train_dataset, tune_dataset, num_epochs,
@@ -105,7 +73,7 @@ def train_model(classifier, train_loader, tune_loader, train_dataset, tune_datas
             batch_weights = [class_weights[int(label)] for label in labels]
             batch_weights = torch.DoubleTensor(batch_weights).to(device)
 
-            loss_function = nn.BCELoss(weight=batch_weights)
+            loss_function = nn.BCEWithLogitsLoss(weight=batch_weights)
             optimizer.zero_grad()
             output = classifier(expression)
             loss = loss_function(output, labels)
@@ -127,7 +95,7 @@ def train_model(classifier, train_loader, tune_loader, train_dataset, tune_datas
                 expression = expression.to(device)
                 tune_labels = labels.to(device).double()
 
-                loss_function = nn.BCELoss()
+                loss_function = nn.BCEWithLogitsLoss()
 
                 tune_output = classifier(expression)
 
@@ -155,14 +123,6 @@ def train_model(classifier, train_loader, tune_loader, train_dataset, tune_datas
 
 
 if __name__ == '__main__':
-    # Load mapping file
-    # Load data
-    # Combine all dataframes into a single dataframe
-    # Convert the dataframe into a matrix
-    # Create the label vector based on the mapping file and matrix
-    # Create pytorch dataset from the matrix and labels
-    # train model on dataset
-
     parser = argparse.ArgumentParser(description='This script trains a classifier to differentiate'
                                                  ' between sepsis and healthy gene expresssion')
     parser.add_argument('map_file',
@@ -205,7 +165,7 @@ if __name__ == '__main__':
     sample_to_label = util.parse_map_file(args.map_file)
 
     # Prepare data
-    train_dirs, tune_dirs = train_tune_split(args.data_dir, args.tune_study_count)
+    train_dirs, tune_dirs = util.train_tune_split(args.data_dir, args.tune_study_count)
     label_to_encoding = {'sepsis': 1, 'healthy': 0}
 
     logger.info('Generating training dataset...')
