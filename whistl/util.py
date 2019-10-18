@@ -1,12 +1,59 @@
 '''This file contains useful functions for processing data'''
 
+import os
+import pickle
+import random
+
+
+def save_results(out_file_path, results):
+    '''Write the results of a classifier training run to a file
+
+    Arguments
+    ---------
+    out_file_path: str or Path
+        The path to save the results to
+    results: dict
+        The results to save to the file
+    '''
+    with open(out_file_path, 'wb') as out_file:
+        pickle.dump(results, out_file)
+
+
+def train_tune_split(data_dir, tune_study_count):
+    '''Split the data directories into train and tune directories
+
+    Arguments
+    ---------
+    data_dir: str or Path
+        The directory containing subdirectories with gene expression data
+    tune_study_count:
+        The number of studies to put in the tuning set
+
+    Returns
+    -------
+    train_dirs: list of strs
+        The directories to be used as training data
+    tune_dirs: list of strs
+        The directories to be used for model tuning
+    '''
+    # List everything in data_dir
+    subfiles = [os.path.join(data_dir, f) for f in os.listdir(data_dir)]
+    # Keep only data directories, not anything else that might be in data_dir
+    data_dirs = [f for f in subfiles if ('SRP' in f or 'GSE' in f) and os.path.isdir(f)]
+
+    # Pull out directories for tuning, then put everything else in train_dirs
+    tune_dirs = random.sample(data_dirs, tune_study_count)
+    train_dirs = [dir_ for dir_ in data_dirs if dir_ not in tune_dirs]
+
+    return train_dirs, tune_dirs
+
 
 def count_correct(output, labels):
     '''Calculate the number of correct predictions in the given batch'''
     # This could be more efficient with a hard sigmoid or something,
     # Performance impact should be negligible though
     correct = 0
-    predictions = [1 if p > .5 else 0 for p in output]
+    predictions = [1 if p > 0 else 0 for p in output]
     for y, y_hat in zip(predictions, labels):
         if y == y_hat:
             correct += 1
