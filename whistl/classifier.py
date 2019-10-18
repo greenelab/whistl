@@ -28,6 +28,9 @@ def compute_irm_penalty(loss, dummy_w):
 def train_with_irm(classifier, map_file, train_dirs, tune_dirs, gene_file,
                    num_epochs, loss_scaling_factor, label_to_encoding, device, logger=None):
     '''Train the provided classifier using invariant risk minimization
+    IRM looks for features in the data that are invariant between different environments, as
+    they are more likely to be predictive of true causal signals as opposed to spurious
+    correlations. For more information, read https://arxiv.org/abs/1907.02893
 
     Arguments
     ---------
