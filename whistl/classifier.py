@@ -131,18 +131,18 @@ def train_with_irm(classifier, map_file, train_dirs, tune_dirs, gene_file,
                     train_raw_loss += loss
                     train_correct += util.count_correct(pred, labels)
 
-                    # This penalty is the norm of the gradient of 1 * the loss function.
-                    # The penalty helps keep the model from ignoring one study to the benefit
-                    # of the others, and the theoretical basis can be found in the Invariant
-                    # Risk Minimization paper
-                    penalty = compute_irm_penalty(loss, dummy_w)
-                    train_penalty += penalty
+                # This penalty is the norm of the gradient of 1 * the loss function.
+                # The penalty helps keep the model from ignoring one study to the benefit
+                # of the others, and the theoretical basis can be found in the Invariant
+                # Risk Minimization paper
+                penalty = compute_irm_penalty(loss, dummy_w)
+                train_penalty += penalty
 
-                    optimizer.zero_grad()
-                    # Calculate the gradient of the combined loss function
-                    train_loss += loss_scaling_factor * loss + penalty
-                    (loss_scaling_factor * loss + penalty).backward()
-                    optimizer.step()
+                optimizer.zero_grad()
+                # Calculate the gradient of the combined loss function
+                train_loss += loss_scaling_factor * loss + penalty
+                (loss_scaling_factor * loss + penalty).backward()
+                optimizer.step()
 
             tune_loss = 0
             tune_correct = 0
