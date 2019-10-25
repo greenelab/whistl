@@ -6,6 +6,7 @@ import torch.nn.functional as F
 
 
 class ThreeLayerNet(nn.Module):
+    '''A simple feed-forward neural network with three layers'''
     def __init__(self, input_size):
         super(ThreeLayerNet, self).__init__()
 
@@ -16,5 +17,6 @@ class ThreeLayerNet(nn.Module):
     def forward(self, x):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        x = torch.sigmoid(self.fc3(x)).view(-1)
+        # Sigmoid function is handle by BCEWithLogitsLoss
+        x = self.fc3(x).view(-1)
         return x
