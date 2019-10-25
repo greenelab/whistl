@@ -19,7 +19,11 @@ import util
 
 
 def compute_irm_penalty(loss, dummy_w):
-    ''' Calculate the invariance penalty for the classifier'''
+    '''Calculate the invariance penalty for the classifier. This penalty is the norm of the
+    gradient of the loss function multiplied by a dummy classifier with the value 1. This penalty
+    constrains the model to perform well across studies. A more detailed explanation on why the
+    dummy classifier is used can be found in section 3.1 of https://arxiv.org/abs/1907.02893
+    '''
     dummy_grad = abs(grad(loss, dummy_w, create_graph=True)[0])
 
     return dummy_grad
@@ -96,14 +100,9 @@ def train_with_irm(classifier, map_file, train_dirs, tune_dirs, gene_file,
 
     try:
         # TODO there is probably a more concise way of handling this
-        train_samples = 0
-        for study_count in train_study_counts:
-            train_samples += study_count
+        train_samples = sum(train_study_counts)
 
         dummy_w = torch.nn.Parameter(torch.DoubleTensor([1.0]))
-        # Create dictionary of parameters for visualizing operations
-        params = dict(classifier.named_parameters())
-        params['dummy_w'] = dummy_w
 
         for epoch in tqdm(range(num_epochs)):
             train_correct = 0
