@@ -113,3 +113,15 @@ def plot_raw_train_loss(results):
     plot = plot_metric(metric_name, metric_list)
 
     return plot
+
+
+def plot_train_loss(results):
+    '''Plot the combined training loss (in the case of irm) or the normal training loss
+    (for erm)'''
+    metric_list = results['train_loss']
+    metric_list = [float(i) for i in metric_list]
+    metric_name = 'Training Loss'
+
+    plot = plot_metric(metric_name, metric_list)
+
+    return plot
