@@ -11,7 +11,7 @@ from torch.autograd import grad
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from tqdm import tqdm
+from tqdm import tqdm_notebook
 
 import dataset
 import model
@@ -85,7 +85,7 @@ def train_with_irm(classifier, map_file, train_dirs, tune_dirs, gene_file,
     tune_loader = DataLoader(tune_dataset, batch_size=16, num_workers=2, pin_memory=True)
 
     input_size = tune_dataset[0][0].shape[0]
-    classifier = classifier(input_size).double()
+    classifier = classifier(input_size).double().to(device)
 
     optimizer = optim.Adam(classifier.parameters(), lr=1e-5)
 
@@ -102,9 +102,9 @@ def train_with_irm(classifier, map_file, train_dirs, tune_dirs, gene_file,
         # TODO there is probably a more concise way of handling this
         train_samples = sum(train_study_counts)
 
-        dummy_w = torch.nn.Parameter(torch.DoubleTensor([1.0]))
+        dummy_w = torch.nn.Parameter(torch.DoubleTensor([1.0])).to(device)
 
-        for epoch in tqdm(range(num_epochs)):
+        for epoch in tqdm_notebook(range(num_epochs)):
             train_correct = 0
             train_loss = 0
             train_penalty = 0
@@ -164,8 +164,8 @@ def train_with_irm(classifier, map_file, train_dirs, tune_dirs, gene_file,
             train_loss = train_loss / train_samples
             train_acc = train_correct / train_samples
             # We cast these to floats to avoid having to pickle entire Tensor objects
-            train_penalty = float(train_penalty / train_samples)
-            train_raw_loss = float(train_raw_loss / train_samples)
+            train_penalty = (train_penalty / train_samples).float()
+            train_raw_loss = (train_raw_loss / train_samples).float()
 
             results['train_loss'].append(train_loss)
             results['train_acc'].append(train_acc)
@@ -182,14 +182,13 @@ def train_with_irm(classifier, map_file, train_dirs, tune_dirs, gene_file,
                 logger.info('Tune accuracy: {}'.format(tune_acc))
                 logger.info('Baseline accuracy: {}'.format(baseline))
     except Exception as e:
-        print(e)
-        raise e
+        logger.error(e, exc_info=True)
     finally:
         return results
 
 
-def train_model_vanilla(classifier, map_file, train_dirs, tune_dirs, gene_file,
-                        num_epochs, label_to_encoding, device, logger=None):
+def train_with_erm(classifier, map_file, train_dirs, tune_dirs, gene_file, num_epochs,
+                   label_to_encoding, device, logger=None):
     ''' Train the provided classifier on the data from train_loader, evaluating the performance
     along the way with the data from tune_loader
 
@@ -235,7 +234,7 @@ def train_model_vanilla(classifier, map_file, train_dirs, tune_dirs, gene_file,
 
     # Get the number of genes in the data
     input_size = train_dataset[0][0].shape[0]
-    classifier = classifier(input_size).double()
+    classifier = classifier(input_size).double().to(device)
     optimizer = optim.Adam(classifier.parameters(), lr=1e-5)
 
     if logger is not None:
@@ -251,7 +250,7 @@ def train_model_vanilla(classifier, map_file, train_dirs, tune_dirs, gene_file,
     results = {'train_loss': [], 'tune_loss': [], 'train_acc': [], 'tune_acc': [],
                'baseline': baseline}
     try:
-        for epoch in tqdm(range(num_epochs)):
+        for epoch in tqdm_notebook(range(num_epochs)):
             train_loss = 0
             train_correct = 0
             # Set training mode
@@ -320,7 +319,8 @@ def train_model_vanilla(classifier, map_file, train_dirs, tune_dirs, gene_file,
             results['train_acc'].append(train_accuracy)
             results['tune_acc'].append(tune_accuracy)
     except Exception as e:
-        raise e
+        # Print error
+        logger.error(e, exc_info=True)
     finally:
         return results
 
@@ -382,8 +382,8 @@ if __name__ == '__main__':
     out_path = args.out_file + '_irm.pkl'
     util.save_results(args.out_file, results)
 
-    results = train_model_vanilla(classifier, args.map_file, train_dirs, tune_dirs, args.gene_file,
-                                  args.num_epochs, label_to_encoding, device, logger)
+    results = train_with_erm(classifier, args.map_file, train_dirs, tune_dirs, args.gene_file,
+                             args.num_epochs, label_to_encoding, device, logger)
 
     out_path = args.out_file + '_vanilla.pkl'
     util.save_results(out_path, results)
