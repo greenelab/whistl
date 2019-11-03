@@ -163,8 +163,9 @@ def train_with_irm(classifier, map_file, train_dirs, tune_dirs, gene_file,
             tune_acc = tune_correct / len(tune_dataset)
             train_loss = train_loss / train_samples
             train_acc = train_correct / train_samples
-            train_penalty = train_penalty / train_samples
-            train_raw_loss = train_raw_loss / train_samples
+            # We cast these to floats to avoid having to pickle entire Tensor objects
+            train_penalty = float(train_penalty / train_samples)
+            train_raw_loss = float(train_raw_loss / train_samples)
 
             results['train_loss'].append(train_loss)
             results['train_acc'].append(train_acc)
