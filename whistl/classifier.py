@@ -135,12 +135,12 @@ def train_with_irm(classifier, map_file, train_dirs, tune_dirs, gene_file,
                 # of the others, and the theoretical basis can be found in the Invariant
                 # Risk Minimization paper
                 penalty = compute_irm_penalty(loss, dummy_w)
-                train_penalty += penalty
+                train_penalty += float(penalty)
 
                 optimizer.zero_grad()
                 # Calculate the gradient of the combined loss function
-                train_loss += loss_scaling_factor * loss + penalty
-                (loss_scaling_factor * loss + penalty).backward()
+                train_loss += float(loss_scaling_factor * loss + penalty)
+                (loss_scaling_factor * loss + penalty).backward(retain_graph=False)
                 optimizer.step()
 
             tune_loss = 0
@@ -149,12 +149,12 @@ def train_with_irm(classifier, map_file, train_dirs, tune_dirs, gene_file,
             with torch.no_grad():
                 for tune_batch in tune_loader:
                     expression, labels, ids = tune_batch
-                    expression = expression.to(device)
+                    tune_expression = expression.to(device)
                     tune_labels = labels.to(device).double()
 
                     loss_function = nn.BCEWithLogitsLoss()
 
-                    tune_preds = classifier(expression)
+                    tune_preds = classifier(tune_expression)
                     loss = loss_function(tune_preds, tune_labels)
                     tune_loss += float(loss)
                     tune_correct += util.count_correct(tune_preds, tune_labels)
@@ -164,8 +164,8 @@ def train_with_irm(classifier, map_file, train_dirs, tune_dirs, gene_file,
             train_loss = train_loss / train_samples
             train_acc = train_correct / train_samples
             # We cast these to floats to avoid having to pickle entire Tensor objects
-            train_penalty = (train_penalty / train_samples).float()
-            train_raw_loss = (train_raw_loss / train_samples).float()
+            train_penalty = float(train_penalty / train_samples)
+            train_raw_loss = float(train_raw_loss / train_samples)
 
             results['train_loss'].append(train_loss)
             results['train_acc'].append(train_acc)
@@ -181,6 +181,7 @@ def train_with_irm(classifier, map_file, train_dirs, tune_dirs, gene_file,
                 logger.info('Train accuracy: {}'.format(train_acc))
                 logger.info('Tune accuracy: {}'.format(tune_acc))
                 logger.info('Baseline accuracy: {}'.format(baseline))
+
     except Exception as e:
         logger.error(e, exc_info=True)
     finally:
@@ -301,7 +302,7 @@ def train_with_erm(classifier, map_file, train_dirs, tune_dirs, gene_file, num_e
                                 pred = 1
 
                             if pred != label:
-                                print('True: {}, Pred: {}, ID: {}'.format(label, pred, id_))
+                                logger.info('True: {}, Pred: {}, ID: {}'.format(label, pred, id_))
 
             train_accuracy = train_correct / len(train_dataset)
             tune_accuracy = tune_correct / len(tune_dataset)
