@@ -71,7 +71,7 @@ def edit_fields(fields, sample_data):
         choice = input('Add/remove/done: ').strip().lower()
 
         if choice == 'add':
-            print('Which field would you like to remove?')
+            print('Which field would you like to add?')
             print('Available fields: {}'.format(unused_fields))
             choice = input('Field: ').strip().lower()
 
@@ -140,7 +140,6 @@ def get_sample_label(sample_name, sample_data, valid_labels, fields):
             print('No refinebio annotations found, sorry :(')
         else:
             for field in fields:
-                print(sample_data)
                 if field in sample_data['refinebio_annotations'][0]:
                     print('{}: {}'.format(field, sample_data['refinebio_annotations'][0][field]))
 
@@ -280,7 +279,10 @@ if __name__ == '__main__':
             sample_label = get_sample_label(sample, sample_data, labels, fields)
             if not sample_label:
                 break
-            labeled_samples[sample_label].append(sample)
+            if sample_label in labeled_samples:
+                labeled_samples[sample_label].append(sample)
+            else:
+                labeled_samples[sample_label] = [sample]
             set_of_labeled_samples.add(sample)
 
         print('All samples are labeled!')
