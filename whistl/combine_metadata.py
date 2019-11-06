@@ -34,12 +34,5 @@ if __name__ == '__main__':
     combined_dict['experiments'].update(json1['experiments'])
     combined_dict['experiments'].update(json2['experiments'])
 
-    print(len(json1['samples'].keys()))
-    print(len(json2['samples'].keys()))
-    print(len(combined_dict['samples'].keys()))
-    print(len(json1['experiments'].keys()))
-    print(len(json2['experiments'].keys()))
-    print(len(combined_dict['experiments'].keys()))
-
     with open(args.out_file, 'w') as out_file:
         json.dump(combined_dict, out_file, sort_keys=True, indent=4, separators=(',', ': '))
