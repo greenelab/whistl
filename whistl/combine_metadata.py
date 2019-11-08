@@ -8,11 +8,14 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='This script combines metadata files associated '
                                      'with refine.bio datasets. This allows us to '
                                      'label additional datasets while keeping all the data in a '
-                                     'single version controlled file.')
+                                     'single version controlled file. More specifically, these '
+                                     'metadata files are the aggregated_metadata.json files '
+                                     'present in each dataset zip file.'
+                                     )
 
-    parser.add_argument('file1', help='The path to the first file to combine')
-    parser.add_argument('file2', help='The path to the second file to combine')
-    parser.add_argument('out_file', help='The location to store the combined file to')
+    parser.add_argument('file1', help='The path to the first aggregated_metadata file to combine')
+    parser.add_argument('file2', help='The path to the second aggregated_metadata file to combine')
+    parser.add_argument('out_file', help='The path to the combined file to create')
 
     args = parser.parse_args()
 
