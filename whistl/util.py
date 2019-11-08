@@ -4,6 +4,42 @@ import os
 import pickle
 import random
 
+import numpy as np
+
+
+def generate_encoding(classes):
+    '''Given a list of class names, generate a one-hot encoding for each class
+
+    Arguments
+    ---------
+    classes: list of str
+        The classes to generate an encoding for
+
+    Returns
+    -------
+    label_to_encoding: dict
+        A dictionary mapping each class to its encoding
+    '''
+
+    # Handle binary classification by encoding as 0/1 instead of one-hot
+    if len(classes) == 2:
+        label_to_encoding = {}
+        for i in range(len(classes)):
+            label_to_encoding[classes[i]] = i
+
+        return label_to_encoding
+
+    else:
+        label_to_encoding = {}
+        zero_matrix = np.zeros((len(classes), len(classes)))
+
+        for i in range(len(classes)):
+            encoding = zero_matrix.copy()
+            encoding[i, i] = 1
+            label_to_encoding[classes[i]] = encoding
+
+        return label_to_encoding
+
 
 def save_results(out_file_path, results):
     '''Write the results of a classifier training run to a file
