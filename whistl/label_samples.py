@@ -67,7 +67,7 @@ def edit_fields(fields, sample_data):
     print('Fields available for this sample: {}'.format(unused_fields))
     while not done_editing:
         print()
-        print('Do you want to add or remove a label?')
+        print('Do you want to add or remove a field?')
         choice = input('Add/remove/done: ').strip().lower()
 
         if choice == 'add':
