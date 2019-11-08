@@ -81,6 +81,10 @@ def train_with_irm(classifier, map_file, train_dirs, tune_dirs, gene_file,
     for curr_dir in train_dirs:
         data = dataset.SingleStudyDataset(curr_dir, sample_to_label, label_to_encoding,
                                           gene_file)
+        # Ignore studies with no relevant samples
+        if data.is_invalid:
+            continue
+
         loader = DataLoader(data, batch_size=16, shuffle=True, num_workers=2, pin_memory=True)
         train_study_loaders.append(loader)
         train_study_counts.append(len(data))
