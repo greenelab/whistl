@@ -1,6 +1,6 @@
 name: Python package
 
-on: [push]
+on: [push, pull-request]
 
 jobs:
   build:
@@ -19,7 +19,8 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
       run: |
-        $CONDA env create -f environment.yml
+        # $CONDA is an environment variable pointing to the root of the miniconda directory
+        $CONDA/bin/conda env create -f environment.yml
     - name: Lint with flake8
       run: |
         conda install flake8
