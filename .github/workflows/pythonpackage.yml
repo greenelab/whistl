@@ -45,10 +45,10 @@ jobs:
       uses: actions/setup-python@v1
       with:
         python-version: ${{ matrix.python-version }}
-    - name: Include $CONDA in $PATH
-      run: echo ::add-path::$($Env:CONDA)\bin
-           dir C:\Miniconda
-           dir $($Env:CONDA)
+    - name: Debug statements
+      run: 
+           dir /s /b C:\Miniconda;
+           dir $($Env:CONDA);
            echo $($Env:CONDA)\bin
     - name: Install dependencies
       run: |
