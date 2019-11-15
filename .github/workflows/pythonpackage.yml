@@ -47,8 +47,8 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Include $CONDA in $PATH
       run: echo ::add-path::$CONDA/bin
-      run: echo $CONDA
-      run: echo $CONDA/bin
+           echo $CONDA
+           echo $CONDA/bin
     - name: Install dependencies
       run: |
         # $CONDA is an environment variable pointing to the root of the miniconda directory
