@@ -47,8 +47,7 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Debug statements
       run: 
-           dir /s /b "C:\Miniconda";
-           dir $($Env:CONDA);
+           Get-ChildItem -Path "C:\Miniconda" -Recurse;
            echo $($Env:CONDA)\bin
     - name: Install dependencies
       run: |
