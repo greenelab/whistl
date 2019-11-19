@@ -201,6 +201,8 @@ def train_with_irm(classifier, map_file, train_dirs, tune_dirs, gene_file,
     except Exception as e:
         logger.error(e, exc_info=True)
     finally:
+        results = util.add_genes_to_results(results, gene_file)
+        results = util.add_study_ids_to_results(results, train_dirs, tune_dirs)
         return results
 
 
@@ -343,6 +345,8 @@ def train_with_erm(classifier, map_file, train_dirs, tune_dirs, gene_file, num_e
         # Print error
         logger.error(e, exc_info=True)
     finally:
+        results = util.add_genes_to_results(results, gene_file)
+        results = util.add_study_ids_to_results(results, train_dirs, tune_dirs)
         return results
 
 
