@@ -170,7 +170,7 @@ def train_with_irm(classifier, map_file, train_dirs, tune_dirs, gene_file,
 
                 # Save the model
                 if save_file is not None:
-                    if best_tune_loss is not None and tune_loss < best_tune_loss:
+                    if best_tune_loss is None or tune_loss < best_tune_loss:
                         best_tune_loss = tune_loss
                         if epoch > burn_in_epochs:
                             torch.save(classifier, save_file)
@@ -321,7 +321,7 @@ def train_with_erm(classifier, map_file, train_dirs, tune_dirs, gene_file, num_e
 
                 # Save the model
                 if save_file is not None:
-                    if best_tune_loss is not None and tune_loss < best_tune_loss:
+                    if best_tune_loss is None or tune_loss < best_tune_loss:
                         best_tune_loss = tune_loss
                         if epoch > burn_in_epochs:
                             torch.save(classifier, save_file)
