@@ -1,6 +1,7 @@
 '''A set of tests for functions in util.py'''
 
 import os
+import pickle
 import sys
 
 import pandas as pd
