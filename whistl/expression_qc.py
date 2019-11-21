@@ -25,7 +25,7 @@ if __name__ == '__main__':
 
     for dir_ in os.listdir(args.study_dir):
         if 'SRP' in dir_ or 'GSE' in dir_:
-            study = dir_.strip('/')
+            study = os.path.normpath(dir_)
             expression_file = os.path.join(args.study_dir, study, study + '.tsv')
 
             expression_df = pd.read_csv(expression_file, sep='\t')
@@ -37,6 +37,5 @@ if __name__ == '__main__':
                 print('Study {} only has {} genes'.format(study, len(expression_df.index)))
                 print('Moving to missing_data/')
 
-                os.mkdir(os.path.join(args.missing_data_dir, study))
                 os.rename(os.path.join(args.study_dir, study),
                           os.path.join(args.missing_data_dir, study))

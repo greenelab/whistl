@@ -95,6 +95,60 @@ def add_study_ids_to_results(results, train_dirs, tune_dirs):
     return results
 
 
+def add_genes_to_results(results, gene_file):
+    '''Add the ids of the genes used to train the model to the results dictionary
+
+    Arguments
+    ---------
+    results: dict
+        The dictionary containing metrics about the run
+    gene_file: str or Path
+        The file containing the list of genes to train the model on
+
+    Returns
+    -------
+    results: dict
+        The dictionary passed in with the list of genes added
+    '''
+    genes = parse_gene_file(gene_file)
+    results['genes'] = genes
+
+    return results
+
+
+def add_study_ids_to_results(results, train_dirs, tune_dirs):
+    '''Add the ids of the training and tuning set studies used to the results dictionary
+
+    Arguments
+    ---------
+    results: dict
+        The dictionary containing metrics about the run
+    train_dirs: list of strings
+        The paths to each directory containing a study that was used in training the model
+    tune_dirs: list of strings
+        The paths to each directory containing a study that was used in tuning the model
+
+    Returns
+    -------
+    results: dict
+        The dictionary passed in, with the train and tune study ids added
+    '''
+    train_ids = []
+    tune_ids = []
+
+    for dir_ in train_dirs:
+        study_id = os.path.split(os.path.normpath(dir_))[-1]
+        train_ids.append(study_id)
+    for dir_ in tune_dirs:
+        study_id = os.path.split(os.path.normpath(dir_))[-1]
+        tune_ids.append(study_id)
+
+    results['train_ids'] = train_ids
+    results['tune_ids'] = tune_ids
+
+    return results
+
+
 def save_results(out_file_path, results):
     '''Write the results of a classifier training run to a file
 
