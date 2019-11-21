@@ -47,10 +47,10 @@ def add_study_ids_to_results(results, train_dirs, tune_dirs):
     tune_ids = []
 
     for dir_ in train_dirs:
-        study_id = dir_.strip('/').split('/')[-1]
+        study_id = os.path.split(os.path.normpath(dir_))[-1]
         train_ids.append(study_id)
     for dir_ in tune_dirs:
-        study_id = dir_.strip('/').split('/')[-1]
+        study_id = os.path.split(os.path.normpath(dir_))[-1]
         tune_ids.append(study_id)
 
     results['train_ids'] = train_ids
