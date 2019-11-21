@@ -1,28 +1,10 @@
 '''This file contains useful functions for processing data'''
 
-import csv
 import os
 import pickle
 import random
 
 import numpy as np
-
-
-def save_dictionary_to_csv(dict_, out_file_base):
-    '''Write a given dictionary to a csv
-
-    Arguments
-    ---------
-    dict_: dict
-        The dictionary to write
-    out_file: string or Path
-        The path to the file name to write to (without extensions)
-    '''
-    # Remove any extensions on the file name
-    out_file_base = out_file_base.rstrip('.csv')
-    with open(out_file_base, 'w') as out_file:
-        writer = csv.DictWriter(out_file, dict_.keys())
-        writer.writerows(dict_)
 
 
 def generate_encoding(classes):
