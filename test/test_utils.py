@@ -1,4 +1,5 @@
-'''A set of tests for functions in util.py'''
+'''A set of tests for functions in util.py. Each function is named according to the function that
+it tests in util.py.'''
 
 import os
 import pickle
