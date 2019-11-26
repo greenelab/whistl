@@ -38,8 +38,15 @@ def parse_study_dir(data_dir, sample_to_label, label_to_encoding, genes_to_keep)
     curr_df = pd.read_csv(data_file, sep='\t')
 
     curr_df = curr_df.set_index('Gene')
+
     # Remove samples that don't fall into a class of interest
-    curr_df = util.remove_samples_with_label(curr_df, sample_to_label, 'other')
+    labels_to_keep = label_to_encoding.keys()
+    curr_df = util.keep_samples_with_labels(curr_df, sample_to_label, labels_to_keep)
+
+    # If keep_samples_with_labels returns None, we should return None for the labels as well
+    if curr_df is None:
+        return (None, None)
+
     # Retrieve labels for each sample
     study_labels = util.get_labels(curr_df, sample_to_label, label_to_encoding)
 
@@ -73,6 +80,8 @@ class ExpressionDataset(Dataset):
         for data_dir in data_dirs:
             curr_df, study_labels = parse_study_dir(data_dir, sample_to_label, label_to_encoding,
                                                     genes_to_keep)
+            if curr_df is None or study_labels is None:
+                continue
 
             df_list.append(curr_df)
             labels.extend(study_labels)
@@ -137,6 +146,14 @@ class SingleStudyDataset(Dataset):
         genes_to_keep = util.parse_gene_file(gene_file_path)
         study_df, labels = parse_study_dir(data_dir, sample_to_label, label_to_encoding,
                                            genes_to_keep)
+
+        # We want to mark datasets as invalid if they don't contain any information relevant
+        # to the current class of interest
+        self.is_invalid = False
+        if study_df is None:
+            self.is_invalid = True
+            return
+
         assert len(labels) == len(study_df.columns)
 
         labels = np.array(labels)

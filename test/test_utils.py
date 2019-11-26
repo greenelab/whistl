@@ -1,10 +1,13 @@
-'''A set of tests for functions in util.py'''
+'''A set of tests for functions in util.py. Each function is named according to the function that
+it tests in util.py.'''
 
 import os
+import pickle
 import sys
 
 import pandas as pd
 import pytest
+import numpy as np
 
 whistl_path = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(whistl_path + '/../whistl')
@@ -39,6 +42,27 @@ def test_remove_samples_with_label(df, sample_to_label, label_to_remove, correct
     assert len(filtered_df.columns) == len(correct_cols)
     for test_column, correct_column in zip(filtered_df.columns, correct_cols):
         assert test_column == correct_column
+
+
+class1_encoding = np.zeros((3, 3))
+class1_encoding[0, 0] = 1
+class2_encoding = np.zeros((3, 3))
+class2_encoding[1, 1] = 1
+class3_encoding = np.zeros((3, 3))
+class3_encoding[2, 2] = 1
+
+
+@pytest.mark.parametrize('classes,correct_encodings',
+                         [(['class1', 'class2', 'class3'],
+                           [class1_encoding, class2_encoding, class3_encoding]),
+                          (['class1', 'class2'], [0, 1]),
+                          ])
+def test_generate_encoding(classes, correct_encodings):
+    generated_encodings = util.generate_encoding(classes)
+
+    for i, curr_class in enumerate(generated_encodings.keys()):
+        generated_encoding = generated_encodings[curr_class]
+        assert np.array_equal(generated_encoding, correct_encodings[i])
 
 
 dir_list_1 = ['../data/GSE1', '../data/GSE2/']

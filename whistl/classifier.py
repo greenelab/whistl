@@ -30,7 +30,8 @@ def compute_irm_penalty(loss, dummy_w):
 
 
 def train_with_irm(classifier, map_file, train_dirs, tune_dirs, gene_file,
-                   num_epochs, loss_scaling_factor, label_to_encoding, device, logger=None):
+                   num_epochs, loss_scaling_factor, label_to_encoding, device, logger=None,
+                   save_file=None, burn_in_epochs=100):
     '''Train the provided classifier using invariant risk minimization
     IRM looks for features in the data that are invariant between different environments, as
     they are more likely to be predictive of true causal signals as opposed to spurious
@@ -60,6 +61,10 @@ def train_with_irm(classifier, map_file, train_dirs, tune_dirs, gene_file,
         The device to train the model on (either a gpu or a cpu)
     logger: logging.logger
         The python logger object to handle printing logs
+    save_file: string or Path object
+        The file to save the model to. If save_file is None, the model won't be saved
+    burn_in_epochs: int
+        The number of epochs at the beginning of training to not save the model
 
     Returns
     -------
@@ -76,6 +81,10 @@ def train_with_irm(classifier, map_file, train_dirs, tune_dirs, gene_file,
     for curr_dir in train_dirs:
         data = dataset.SingleStudyDataset(curr_dir, sample_to_label, label_to_encoding,
                                           gene_file)
+        # Ignore studies with no relevant samples
+        if data.is_invalid:
+            continue
+
         loader = DataLoader(data, batch_size=16, shuffle=True, num_workers=2, pin_memory=True)
         train_study_loaders.append(loader)
         train_study_counts.append(len(data))
@@ -99,10 +108,10 @@ def train_with_irm(classifier, map_file, train_dirs, tune_dirs, gene_file,
                'baseline': baseline, 'train_penalty': [], 'train_raw_loss': []}
 
     try:
-        # TODO there is probably a more concise way of handling this
         train_samples = sum(train_study_counts)
 
         dummy_w = torch.nn.Parameter(torch.DoubleTensor([1.0])).to(device)
+        best_tune_loss = None
 
         for epoch in tqdm_notebook(range(num_epochs)):
             train_correct = 0
@@ -159,6 +168,13 @@ def train_with_irm(classifier, map_file, train_dirs, tune_dirs, gene_file,
                     tune_loss += float(loss)
                     tune_correct += util.count_correct(tune_preds, tune_labels)
 
+                # Save the model
+                if save_file is not None:
+                    if best_tune_loss is None or tune_loss < best_tune_loss:
+                        best_tune_loss = tune_loss
+                        if epoch > burn_in_epochs:
+                            torch.save(classifier, save_file)
+
             tune_loss = tune_loss / len(tune_dataset)
             tune_acc = tune_correct / len(tune_dataset)
             train_loss = train_loss / train_samples
@@ -191,7 +207,7 @@ def train_with_irm(classifier, map_file, train_dirs, tune_dirs, gene_file,
 
 
 def train_with_erm(classifier, map_file, train_dirs, tune_dirs, gene_file, num_epochs,
-                   label_to_encoding, device, logger=None):
+                   label_to_encoding, device, logger=None, save_file=None, burn_in_epochs=30):
     ''' Train the provided classifier on the data from train_loader, evaluating the performance
     along the way with the data from tune_loader
 
@@ -215,6 +231,10 @@ def train_with_erm(classifier, map_file, train_dirs, tune_dirs, gene_file, num_e
         The device to train the model on (either a gpu or a cpu)
     logger: logging.logger
         The python logger object to handle printing logs
+    save_file: string or Path object
+        The file to save the model to. If save_file is None, the model won't be saved
+    burn_in_epochs: int
+        The number of epochs at the beginning of training to not save the model
 
     Returns
     -------
@@ -253,6 +273,8 @@ def train_with_erm(classifier, map_file, train_dirs, tune_dirs, gene_file, num_e
     results = {'train_loss': [], 'tune_loss': [], 'train_acc': [], 'tune_acc': [],
                'baseline': baseline}
     try:
+        best_tune_loss = None
+
         for epoch in tqdm_notebook(range(num_epochs)):
             train_loss = 0
             train_correct = 0
@@ -297,14 +319,12 @@ def train_with_erm(classifier, map_file, train_dirs, tune_dirs, gene_file, num_e
                     tune_loss += float(loss)
                     tune_correct += util.count_correct(tune_output, tune_labels)
 
-                    if epoch > 70:
-                        for out, label, id_ in zip(tune_output, tune_labels, ids):
-                            pred = 0
-                            if out > 0:
-                                pred = 1
-
-                            if pred != label:
-                                logger.info('True: {}, Pred: {}, ID: {}'.format(label, pred, id_))
+                # Save the model
+                if save_file is not None:
+                    if best_tune_loss is None or tune_loss < best_tune_loss:
+                        best_tune_loss = tune_loss
+                        if epoch > burn_in_epochs:
+                            torch.save(classifier, save_file)
 
             train_accuracy = train_correct / len(train_dataset)
             tune_accuracy = tune_correct / len(tune_dataset)
