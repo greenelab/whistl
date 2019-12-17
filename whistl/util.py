@@ -61,6 +61,7 @@ def extract_test_dirs(data_dirs, disease_label, sample_to_label):
         with open(data_file, 'r') as in_file:
             # The tsv header contains all the sample ids for the study
             sample_ids = in_file.readline()
+            sample_ids = sample_ids.strip().split('\t')
 
         for sample_id in sample_ids:
             if sample_id in sample_to_label:
