@@ -272,6 +272,7 @@ def get_labels(df, sample_to_label, label_to_encoding):
 
 def keep_samples_with_labels(df, sample_to_label, labels_to_keep):
     ''' Remove all samples from a dataframe except those matching one of the provided labels
+
     Arguments
     ---------
     df: pandas.DataFrame
@@ -281,7 +282,9 @@ def keep_samples_with_labels(df, sample_to_label, labels_to_keep):
         A dictionary mapping sample ids to their label
     labels_to_keep: dict.dict_keys (or list of strings, depending on python version)
         The labels to be kept in the dataframe
+
     Returns
+    -------
     df: pandas.DataFrame
         The filtered version of the dataframe passed in
     '''
