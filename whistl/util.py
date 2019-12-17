@@ -41,7 +41,6 @@ def generate_encoding(classes):
         return label_to_encoding
 
 
-
 def get_data_dirs(data_root):
     ''' Extract all the data subdirectories in a given root directory
 
@@ -108,40 +107,6 @@ def extract_test_dirs(data_dirs, disease_label, sample_to_label):
             train_dirs.append(data_dir)
 
     return train_dirs, test_dirs
-
-
-def generate_encoding(classes):
-    '''Given a list of class names, generate a one-hot encoding for each class
-
-    Arguments
-    ---------
-    classes: list of str
-        The classes to generate an encoding for
-
-    Returns
-    -------
-    label_to_encoding: dict
-        A dictionary mapping each class to its encoding
-    '''
-
-    # Handle binary classification by encoding as 0/1 instead of one-hot
-    if len(classes) == 2:
-        label_to_encoding = {}
-        for i in range(len(classes)):
-            label_to_encoding[classes[i]] = i
-
-        return label_to_encoding
-
-    else:
-        label_to_encoding = {}
-        zero_matrix = np.zeros((len(classes), len(classes)))
-
-        for i in range(len(classes)):
-            encoding = zero_matrix.copy()
-            encoding[i, i] = 1
-            label_to_encoding[classes[i]] = encoding
-
-        return label_to_encoding
 
 
 def add_genes_to_results(results, gene_file):
