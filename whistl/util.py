@@ -270,6 +270,32 @@ def get_labels(df, sample_to_label, label_to_encoding):
     return labels
 
 
+def keep_samples_with_labels(df, sample_to_label, labels_to_keep):
+    ''' Remove all samples from a dataframe except those matching one of the provided labels
+    Arguments
+    ---------
+    df: pandas.DataFrame
+        The DataFrame to be filtered. Each column in the DataFrame should be a
+        sample contained in sample_to_label
+    sample_to_label: dict
+        A dictionary mapping sample ids to their label
+    labels_to_keep: dict.dict_keys (or list of strings, depending on python version)
+        The labels to be kept in the dataframe
+    Returns
+    df: pandas.DataFrame
+        The filtered version of the dataframe passed in
+    '''
+    keep_columns = [col for col in df.columns if sample_to_label[col] in labels_to_keep]
+    # Some studies will only contain a disease you aren't currently working with. If that
+    # is the case, return None to signal that the Dataset shouldn't include this study
+    if len(keep_columns) == 0:
+        return None
+
+    df = df[keep_columns]
+
+    return df
+
+
 def remove_samples_with_label(df, sample_to_label, label_to_remove):
     ''' Remove all samples with a given label from the DataFrame
 
