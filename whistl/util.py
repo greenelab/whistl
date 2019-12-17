@@ -7,6 +7,41 @@ import random
 import numpy as np
 
 
+def generate_encoding(classes):
+    '''Given a list of class names, generate a one-hot encoding for each class
+
+    Arguments
+    ---------
+    classes: list of str
+        The classes to generate an encoding for
+
+    Returns
+    -------
+    label_to_encoding: dict
+        A dictionary mapping each class to its encoding
+    '''
+
+    # Handle binary classification by encoding as 0/1 instead of one-hot
+    if len(classes) == 2:
+        label_to_encoding = {}
+        for i in range(len(classes)):
+            label_to_encoding[classes[i]] = i
+
+        return label_to_encoding
+
+    else:
+        label_to_encoding = {}
+        zero_matrix = np.zeros((len(classes), len(classes)))
+
+        for i in range(len(classes)):
+            encoding = zero_matrix.copy()
+            encoding[i, i] = 1
+            label_to_encoding[classes[i]] = encoding
+
+        return label_to_encoding
+
+
+
 def get_data_dirs(data_root):
     ''' Extract all the data subdirectories in a given root directory
 
@@ -177,13 +212,13 @@ def save_results(out_file_path, results):
         pickle.dump(results, out_file)
 
 
-def train_tune_split(data_dirs, tune_study_count):
+def train_tune_split(data_dir, tune_study_count):
     '''Split the data directories into train and tune directories
 
     Arguments
     ---------
-    data_dirs: list of str or Path
-        The directories gene expression data
+    data_dir: str or Path
+        The directory containing subdirectories with gene expression data
     tune_study_count:
         The number of studies to put in the tuning set
 
@@ -194,6 +229,11 @@ def train_tune_split(data_dirs, tune_study_count):
     tune_dirs: list of strs
         The directories to be used for model tuning
     '''
+    # List everything in data_dir
+    subfiles = [os.path.join(data_dir, f) for f in os.listdir(data_dir)]
+    # Keep only data directories, not anything else that might be in data_dir
+    data_dirs = [f for f in subfiles if ('SRP' in f or 'GSE' in f) and os.path.isdir(f)]
+
     # Pull out directories for tuning, then put everything else in train_dirs
     tune_dirs = random.sample(data_dirs, tune_study_count)
     train_dirs = [dir_ for dir_ in data_dirs if dir_ not in tune_dirs]
@@ -263,34 +303,6 @@ def get_labels(df, sample_to_label, label_to_encoding):
         labels.append(label_to_encoding[sample_to_label[column]])
 
     return labels
-
-
-def keep_samples_with_labels(df, sample_to_label, labels_to_keep):
-    ''' Remove all samples from a dataframe except those matching one of the provided labels
-
-    Arguments
-    ---------
-    df: pandas.DataFrame
-        The DataFrame to be filtered. Each column in the DataFrame should be a
-        sample contained in sample_to_label
-    sample_to_label: dict
-        A dictionary mapping sample ids to their label
-    labels_to_keep: dict.dict_keys (or list of strings, depending on python version)
-        The labels to be kept in the dataframe
-
-    Returns
-    df: pandas.DataFrame
-        The filtered version of the dataframe passed in
-    '''
-    keep_columns = [col for col in df.columns if sample_to_label[col] in labels_to_keep]
-    # Some studies will only contain a disease you aren't currently working with. If that
-    # is the case, return None to signal that the Dataset shouldn't include this study
-    if len(keep_columns) == 0:
-        return None
-
-    df = df[keep_columns]
-
-    return df
 
 
 def remove_samples_with_label(df, sample_to_label, label_to_remove):
