@@ -32,7 +32,7 @@ def parse_study_dir(data_dir, sample_to_label, label_to_encoding, genes_to_keep)
     study_labels: list of ints
         Labels corresponding to whether each sample contains to septic or healthy gene expression
     '''
-    study = data_dir.rstrip('/').split('/')[-1]
+    study = os.path.basename(os.path.normpath(data_dir))
     study_file_name = study + '.tsv'
     data_file = os.path.join(data_dir, study_file_name)
     curr_df = pd.read_csv(data_file, sep='\t')

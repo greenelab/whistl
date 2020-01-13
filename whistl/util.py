@@ -41,6 +41,74 @@ def generate_encoding(classes):
         return label_to_encoding
 
 
+def get_data_dirs(data_root):
+    ''' Extract all the data subdirectories in a given root directory
+
+    Arguments
+    ---------
+    data_root: str or Path
+        The root directory whose subdirectories contain gene expression data
+
+    Returns
+    -------
+    data_dirs: list of str or Path
+        The list of directories containing gene expression data
+    '''
+    # List everything in data_root
+    subfiles = [os.path.join(data_root, f) for f in os.listdir(data_root)]
+    # Keep only data directories, not anything else that might be in data_root
+    data_dirs = [f for f in subfiles if ('SRP' in f or 'GSE' in f) and os.path.isdir(f)]
+
+    return data_dirs
+
+
+def extract_test_dirs(data_dirs, disease_label, sample_to_label):
+    ''' Split the list of directories passed in into those that contain samples with a given
+    disease, and those that don't
+
+    Arguments
+    ---------
+    data_dirs: list of str or Path
+        A list of directories containing gene expression data
+    disease_label: str
+        The name of the disease whose samples will be used in testing
+    sample_to_label: dict
+        A string to string dict mapping sample ids to their corresponding label string.
+        E.g. {'GSM297791': 'sepsis'}
+
+    Returns
+    -------
+    train_dirs: list of str or Path
+        The directories from data_dirs not containing any samples corresponding to disease_label
+    test_dirs: list of str or Path
+        The directories from data_dirs that do contain samples with the provided disease
+    '''
+    train_dirs = []
+    test_dirs = []
+
+    for data_dir in data_dirs:
+        study = os.path.basename(os.path.normpath(data_dir))
+        study_file_name = study + '.tsv'
+        data_file = os.path.join(data_dir, study_file_name)
+
+        sample_ids = None
+        with open(data_file, 'r') as in_file:
+            # The tsv header contains all the sample ids for the study
+            sample_ids = in_file.readline()
+            sample_ids = sample_ids.strip().split('\t')
+
+        for sample_id in sample_ids:
+            if sample_id in sample_to_label:
+                if sample_to_label[sample_id] == disease_label:
+                    test_dirs.append(data_dir)
+                    break
+        else:
+            # If the the dir isn't added to test_dirs, add to train_dirs
+            train_dirs.append(data_dir)
+
+    return train_dirs, test_dirs
+
+
 def add_genes_to_results(results, gene_file):
     '''Add the ids of the genes used to train the model to the results dictionary
 
@@ -216,6 +284,7 @@ def keep_samples_with_labels(df, sample_to_label, labels_to_keep):
         The labels to be kept in the dataframe
 
     Returns
+    -------
     df: pandas.DataFrame
         The filtered version of the dataframe passed in
     '''

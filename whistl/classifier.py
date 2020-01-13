@@ -399,7 +399,9 @@ if __name__ == '__main__':
     label_to_encoding = {'sepsis': 1, 'healthy': 0}
     classifier = model.ThreeLayerNet
 
-    train_dirs, tune_dirs = util.train_tune_split(args.data_dir, args.tune_study_count)
+    data_dirs = util.get_data_dirs(args.data_dir)
+
+    train_dirs, tune_dirs = util.train_tune_split(data_dirs, args.tune_study_count)
 
     results = train_with_irm(classifier, args.map_file, train_dirs, tune_dirs, args.gene_file,
                              args.num_epochs, args.loss_scaling_factor,
