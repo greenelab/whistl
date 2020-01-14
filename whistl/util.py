@@ -7,6 +7,28 @@ import random
 import numpy as np
 
 
+def get_gene_count(gene_file):
+    '''
+
+    Arguments
+    ---------
+    gene_file: string or Path
+        The path to a file containing the list of genes created by
+        microarray_rnaseq_gene_intersection.py
+
+    Returns
+    -------
+    num_genes: int
+        The number of genes present in the gene file
+    '''
+    num_genes = 0
+    with open(gene_file) as in_file:
+        for line in in_file:
+            num_genes += 1
+
+    return num_genes
+
+
 def generate_encoding(classes):
     '''Given a list of class names, generate a one-hot encoding for each class
 
