@@ -241,7 +241,6 @@ def train_with_erm(classifier, map_file, train_dirs, tune_dirs, gene_file, num_e
     results: dict
         A dictionary containing lists tracking different loss metrics across epochs
     '''
-
     sample_to_label = util.parse_map_file(map_file)
 
     # Prepare data
@@ -350,6 +349,62 @@ def train_with_erm(classifier, map_file, train_dirs, tune_dirs, gene_file, num_e
         return results
 
 
+def train_multitask(map_file, train_dirs, tune_dirs, gene_file, num_epochs, classes,
+                    device, logger=None, save_file=None, burn_in_epochs=30):
+    '''
+    Train a multitask learning model to classify multiple diseases from gene expression data
+
+    Arguments
+    ---------
+    map_file: string or Path
+        The file created by label_samples.py to be used to match samples to labels
+    train_dirs: list of str
+        The directories containing training data
+    tune_dirs: list of str
+        The directories containing tuning data
+    gene_file: string or Path
+        The path to the file containing the list of genes to use in the model
+    num_epochs: int
+        The number of times the model should be trained on all the data
+    loss_scaling_factor: float
+        A hyperparameter that balances the classification loss penalty with the study invariance
+        penalty. A larger value of loss_scaling_factor will cause the loss to count for more and
+        the invariance penalty to count for less
+    classes: list of str
+        The list of labels to be used in training
+    device: torch.device
+        The device to train the model on (either a gpu or a cpu)
+    logger: logging.logger
+        The python logger object to handle printing logs
+    save_file: string or Path object
+        The file to save the model to. If save_file is None, the model won't be saved
+    burn_in_epochs: int
+        The number of epochs at the beginning of training to not save the model
+
+    Returns
+    -------
+    results: dict
+        A dictionary containing lists tracking different loss metrics across epochs
+    '''
+    sample_to_label = util.parse_map_file(map_file)
+    label_to_encoding = util.generate_encoding(classes)
+
+    logger.info('Generating training dataset...')
+    train_dataset = dataset.ExpressionDataset(train_dirs, sample_to_label, label_to_encoding,
+                                              gene_file)
+    train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, num_workers=2,
+                              pin_memory=True)
+    logger.info('Generating tuning dataset...')
+    tune_dataset = dataset.ExpressionDataset(tune_dirs, sample_to_label, label_to_encoding,
+                                             gene_file)
+    tune_loader = DataLoader(tune_dataset, batch_size=16, num_workers=2, pin_memory=True)
+
+    # Create classifier based on number of labels
+
+
+
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='This script trains a classifier to differentiate'
                                                  ' between sepsis and healthy gene expresssion')
@@ -373,7 +428,9 @@ if __name__ == '__main__':
                         'classification loss penalty with the study invariance penalty. A larger '
                         'value of loss_scaling_factor will cause the loss to count for more and '
                         'the invariance penalty to count for less', default=1e0)
-    parser.add_argument('--no_gpu', help='Use the CPU to train the network', action='store_false')
+    parser.add_argument('--no_gpu', help='Use the CPU to train the network', action='store_true')
+    parser.add_argument('--multitask', help='Use multitask learning instead of '
+                                            'training on one dataset', action='store_true')
     args = parser.parse_args()
 
     device = None
@@ -396,23 +453,37 @@ if __name__ == '__main__':
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-    label_to_encoding = {'sepsis': 1, 'healthy': 0}
-    classifier = model.ThreeLayerNet
+    if args.multitask:
+        print('multitasking!')
 
-    data_dirs = util.get_data_dirs(args.data_dir)
+        # TODO extract classes from labeled classes file
+        classes = ['sepsis', 'tb']
 
-    train_dirs, tune_dirs = util.train_tune_split(data_dirs, args.tune_study_count)
+        # Initialize encoding class (main network)
 
-    results = train_with_irm(classifier, args.map_file, train_dirs, tune_dirs, args.gene_file,
-                             args.num_epochs, args.loss_scaling_factor,
-                             label_to_encoding, device, logger)
-    out_path = args.out_file + '_irm.pkl'
-    util.save_results(args.out_file, results)
+        # For each disease
+        ## Extract tune set for disease (include healthy)
+        ## Initialize task head
+        ## Train network + disease
+        ## Save task head
 
-    results = train_with_erm(classifier, args.map_file, train_dirs, tune_dirs, args.gene_file,
-                             args.num_epochs, label_to_encoding, device, logger)
+        # Save encoding network
+    else:
+        label_to_encoding = {'sepsis': 1, 'healthy': 0}
+        classifier = model.ThreeLayerNet
 
-    out_path = args.out_file + '_vanilla.pkl'
-    util.save_results(out_path, results)
+        data_dirs = util.get_data_dirs(args.data_dir)
 
-    # TODO model checkpoints/early stopping
+        train_dirs, tune_dirs = util.train_tune_split(data_dirs, args.tune_study_count)
+
+        results = train_with_irm(classifier, args.map_file, train_dirs, tune_dirs, args.gene_file,
+                                 args.num_epochs, args.loss_scaling_factor,
+                                 label_to_encoding, device, logger)
+        out_path = args.out_file + '_irm.pkl'
+        util.save_results(args.out_file, results)
+
+        results = train_with_erm(classifier, args.map_file, train_dirs, tune_dirs, args.gene_file,
+                                 args.num_epochs, label_to_encoding, device, logger)
+
+        out_path = args.out_file + '_vanilla.pkl'
+        util.save_results(out_path, results)
