@@ -4,6 +4,7 @@ import argparse
 import logging
 import numpy as np
 import random
+import sys
 import time
 
 import torch
@@ -349,19 +350,22 @@ def train_with_erm(classifier, map_file, train_dirs, tune_dirs, gene_file, num_e
         return results
 
 
-def train_multitask(map_file, train_dirs, tune_dirs, gene_file, num_epochs, classes,
-                    device, logger=None, save_file=None, burn_in_epochs=30):
+def train_multitask(representation, labels, map_file, data_dirs, gene_file, num_epochs,
+                    loss_scaling_factor, label_to_encoding, device, logger=None):
     '''
     Train a multitask learning model to classify multiple diseases from gene expression data
 
     Arguments
     ---------
+    representation: pytorch.nn.Module to be used as a gene expression representation, for example
+        model.ExpressionRepresentation
+    labels: list of strs
+        The disease labels to train act as different tasks for the model. Note that the label
+        'healthy' should not be in this list, as most studies will contain healthy samples
     map_file: string or Path
         The file created by label_samples.py to be used to match samples to labels
-    train_dirs: list of str
-        The directories containing training data
-    tune_dirs: list of str
-        The directories containing tuning data
+    data_dirs: list of strs or list of Paths
+        The directories containing gene expression data for various experiments
     gene_file: string or Path
         The path to the file containing the list of genes to use in the model
     num_epochs: int
@@ -376,16 +380,55 @@ def train_multitask(map_file, train_dirs, tune_dirs, gene_file, num_epochs, clas
         The device to train the model on (either a gpu or a cpu)
     logger: logging.logger
         The python logger object to handle printing logs
-    save_file: string or Path object
-        The file to save the model to. If save_file is None, the model won't be saved
-    burn_in_epochs: int
-        The number of epochs at the beginning of training to not save the model
 
     Returns
     -------
     results: dict
         A dictionary containing lists tracking different loss metrics across epochs
     '''
+    sample_to_label = util.parse_map_file(map_file)
+
+    num_genes = util.get_gene_count(gene_file)
+    # Initialize the representation portion of the model
+    representation = representation(num_genes)
+
+    for task in labels:
+        _, task_dirs = util.extract_dirs_with_label(data_dirs, task, sample_to_label)
+        # Do binary classification; the disease will always be encoded as label 1
+        label_to_encoding = {task: 1, 'healthy': 0}
+
+        # TODO remove magical number, maybe create a param
+        tune_set_size = 2
+        try:
+            assert len(task_dirs) > tune_set_size
+        except:
+            sys.err.write('Error: {} has {} or fewer studies\n'.format(task, tune_set_size))
+        task_tune_dirs = random.choices(task_dirs, tune_set_size)
+        task_train_dirs = [dir_ for dir_ in task_dirs if dir_ not in task_tune_dirs]
+        sys.exit()
+
+        train_dataset = dataset.ExpressionDataset(task_train_dirs, sample_to_label,
+                                            label_to_encoding, gene_file)
+        tune_dataset = dataset.ExpressionDataset(task_tune_dirs, sample_to_label,
+                                            label_to_encoding, gene_file)
+
+        train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, num_workers=2,
+                                pin_memory=True)
+        tune_loader = DataLoader(tune_dataset, batch_size=16, num_workers=2,
+                                pin_memory=True)
+
+
+
+    # Find input size
+    # Initialize encoding class (main network)
+
+    # For each disease
+    ## Extract tune set for disease (include healthy)
+    ## Initialize task head
+    ## Train network + disease
+    ## Save task head
+
+    # Save encoding network
     sample_to_label = util.parse_map_file(map_file)
     label_to_encoding = util.generate_encoding(classes)
 
@@ -459,15 +502,13 @@ if __name__ == '__main__':
         # TODO extract classes from labeled classes file
         classes = ['sepsis', 'tb']
 
-        # Initialize encoding class (main network)
+        representation = model.ExpressionRepresentation
+        data_dirs = util.get_data_dirs(args.data_dir)
 
-        # For each disease
-        ## Extract tune set for disease (include healthy)
-        ## Initialize task head
-        ## Train network + disease
-        ## Save task head
+        results = train_multitask(representation, args.map_file, data_dirs, args.gene_file,
+                                  args.num_epochs, args.loss_scaling_factor, label_to_encoding,
+                                  device, logger)
 
-        # Save encoding network
     else:
         label_to_encoding = {'sepsis': 1, 'healthy': 0}
         classifier = model.ThreeLayerNet
