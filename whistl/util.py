@@ -84,7 +84,7 @@ def get_data_dirs(data_root):
     return data_dirs
 
 
-def extract_test_dirs(data_dirs, disease_label, sample_to_label):
+def extract_dirs_with_label(data_dirs, disease_label, sample_to_label):
     ''' Split the list of directories passed in into those that contain samples with a given
     disease, and those that don't
 
@@ -100,13 +100,13 @@ def extract_test_dirs(data_dirs, disease_label, sample_to_label):
 
     Returns
     -------
-    train_dirs: list of str or Path
+    dirs_without_label: list of str or Path
         The directories from data_dirs not containing any samples corresponding to disease_label
-    test_dirs: list of str or Path
+    dirs_with_label: list of str or Path
         The directories from data_dirs that do contain samples with the provided disease
     '''
-    train_dirs = []
-    test_dirs = []
+    dirs_without_label = []
+    dirs_with_label = []
 
     for data_dir in data_dirs:
         study = os.path.basename(os.path.normpath(data_dir))
@@ -122,13 +122,13 @@ def extract_test_dirs(data_dirs, disease_label, sample_to_label):
         for sample_id in sample_ids:
             if sample_id in sample_to_label:
                 if sample_to_label[sample_id] == disease_label:
-                    test_dirs.append(data_dir)
+                    dirs_with_label.append(data_dir)
                     break
         else:
-            # If the the dir isn't added to test_dirs, add to train_dirs
-            train_dirs.append(data_dir)
+            # If the the dir isn't added to dirs_with_label, add to dirs_without_label
+            dirs_without_label.append(data_dir)
 
-    return train_dirs, test_dirs
+    return dirs_without_label, dirs_with_label
 
 
 def add_genes_to_results(results, gene_file):
