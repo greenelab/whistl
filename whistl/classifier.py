@@ -4,6 +4,7 @@ import argparse
 import logging
 import numpy as np
 import random
+import os
 import sys
 import time
 
@@ -18,8 +19,8 @@ import dataset
 import model
 import util
 
-#import pudb
-#pudb.set_trace()
+# import pudb
+# pudb.set_trace()
 
 
 def compute_irm_penalty(loss, dummy_w):
@@ -354,7 +355,7 @@ def train_with_erm(classifier, map_file, train_dirs, tune_dirs, gene_file, num_e
 
 
 def train_multitask(representation, labels, map_file, data_dirs, gene_file, num_epochs,
-                    loss_scaling_factor, device, logger=None,
+                    loss_scaling_factor, device, save_file_dir=None, logger=None,
                     tune_study_count=2):
     '''
     Train a multitask learning model to classify multiple diseases from gene expression data
@@ -382,6 +383,8 @@ def train_multitask(representation, labels, map_file, data_dirs, gene_file, num_
         The list of labels to be used in training
     device: torch.device
         The device to train the model on (either a gpu or a cpu)
+    save_file_dir: str
+        The directory to save the models to
     logger: logging.logger
         The python logger object to handle printing logs
     tune_study_count: int
@@ -398,10 +401,8 @@ def train_multitask(representation, labels, map_file, data_dirs, gene_file, num_
     # Initialize the representation portion of the model
     representation = representation(num_genes).double().to(device)
 
+    task_to_results = {}
     for task in labels:
-        ## Initialize task head
-        ## Train network + disease
-        ## Save task head
         _, task_dirs = util.extract_dirs_with_label(data_dirs, task, sample_to_label)
         # Do binary classification; the disease will always be encoded as label 1
         label_to_encoding = {task: 1, 'healthy': 0}
@@ -417,14 +418,14 @@ def train_multitask(representation, labels, map_file, data_dirs, gene_file, num_
         task_train_dirs = [dir_ for dir_ in task_dirs if dir_ not in task_tune_dirs]
 
         train_dataset = dataset.ExpressionDataset(task_train_dirs, sample_to_label,
-                                            label_to_encoding, gene_file)
+                                                  label_to_encoding, gene_file)
         tune_dataset = dataset.ExpressionDataset(task_tune_dirs, sample_to_label,
-                                            label_to_encoding, gene_file)
+                                                 label_to_encoding, gene_file)
 
         train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, num_workers=2,
-                                pin_memory=True)
+                                  pin_memory=True)
         tune_loader = DataLoader(tune_dataset, batch_size=16, num_workers=2,
-                                pin_memory=True)
+                                 pin_memory=True)
 
         task_head = model.MultitaskHead(representation.final_size).double().to(device)
 
@@ -442,6 +443,7 @@ def train_multitask(representation, labels, map_file, data_dirs, gene_file, num_
 
         results = {'train_loss': [], 'tune_loss': [], 'train_acc': [], 'tune_acc': [],
                    'baseline': baseline}
+
         try:
             best_tune_loss = None
 
@@ -489,12 +491,14 @@ def train_multitask(representation, labels, map_file, data_dirs, gene_file, num_
                         tune_loss += float(loss)
                         tune_correct += util.count_correct(tune_output, tune_labels)
 
-                    ## Save the model
-                    #if save_file is not None:
-                    #    if best_tune_loss is None or tune_loss < best_tune_loss:
-                    #        best_tune_loss = tune_loss
-                    #        if epoch > burn_in_epochs:
-                    #            torch.save(classifier, save_file)
+                    # Save the model
+                    if save_file_dir is not None:
+                        if best_tune_loss is None or tune_loss < best_tune_loss:
+                            best_tune_loss = tune_loss
+
+                            head_file_name = 'erm_{}_head.pkl'.format(task)
+                            head_file_path = os.path.join(save_file_dir, head_file_name)
+                            torch.save(task_head, head_file_path)
 
                 train_accuracy = train_correct / len(train_dataset)
                 tune_accuracy = tune_correct / len(tune_dataset)
@@ -507,28 +511,24 @@ def train_multitask(representation, labels, map_file, data_dirs, gene_file, num_
                     logger.info('Tune accuracy: {}'.format(tune_accuracy))
                     logger.info('Baseline accuracy: {}'.format(baseline))
 
-                #results['train_loss'].append(train_loss / len(train_dataset))
-                #results['tune_loss'].append(tune_loss / len(tune_dataset))
-                #results['train_acc'].append(train_accuracy)
-                #results['tune_acc'].append(tune_accuracy)
+                results['train_loss'].append(train_loss / len(train_dataset))
+                results['tune_loss'].append(tune_loss / len(tune_dataset))
+                results['train_acc'].append(train_accuracy)
+                results['tune_acc'].append(tune_accuracy)
         except Exception as e:
             # Print error
             logger.error(e, exc_info=True)
         finally:
+            if save_file_dir is not None:
+                representation_file = os.path.join(save_file_dir, 'erm_representation.pkl')
+                torch.save(representation, representation_file)
+
             results = util.add_genes_to_results(results, gene_file)
-            #results = util.add_study_ids_to_results(results, train_dirs, tune_dirs)
-            #return results
+            results = util.add_study_ids_to_results(results, task_train_dirs, task_tune_dirs)
 
+            task_to_results[task] = results
 
-
-
-
-
-
-    # Save encoding network
-
-
-
+    return task_to_results
 
 
 if __name__ == '__main__':
@@ -586,9 +586,9 @@ if __name__ == '__main__':
         representation = model.ExpressionRepresentation
         data_dirs = util.get_data_dirs(args.data_dir)
 
-        results = train_multitask(representation, classes, args.map_file, data_dirs, args.gene_file,
-                                  args.num_epochs, args.loss_scaling_factor, device, logger,
-                                  args.tune_study_count)
+        results = train_multitask(representation, classes, args.map_file, data_dirs,
+                                  args.gene_file, args.num_epochs, args.loss_scaling_factor,
+                                  device, '../logs', logger, args.tune_study_count)
 
     else:
         label_to_encoding = {'sepsis': 1, 'healthy': 0}
