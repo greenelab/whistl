@@ -179,8 +179,15 @@ def add_study_ids_to_results(results, train_dirs, tune_dirs):
         study_id = os.path.split(os.path.normpath(dir_))[-1]
         tune_ids.append(study_id)
 
-    results['train_ids'] = train_ids
-    results['tune_ids'] = tune_ids
+    if 'train_ids' in results:
+        results['train_ids'].extend(train_ids)
+    else:
+        results['train_ids'] = train_ids
+
+    if 'tune_ids' in results:
+        results['tune_ids'].extend(tune_ids)
+    else:
+        results['tune_ids'] = tune_ids
 
     return results
 
