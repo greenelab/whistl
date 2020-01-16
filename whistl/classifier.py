@@ -379,8 +379,6 @@ def train_multitask(representation, labels, map_file, data_dirs, gene_file, num_
         A hyperparameter that balances the classification loss penalty with the study invariance
         penalty. A larger value of loss_scaling_factor will cause the loss to count for more and
         the invariance penalty to count for less
-    classes: list of str
-        The list of labels to be used in training
     device: torch.device
         The device to train the model on (either a gpu or a cpu)
     save_file_dir: str
