@@ -401,7 +401,7 @@ def train_multitask(representation, labels, map_file, data_dirs, gene_file, num_
         try:
             assert len(task_dirs) > tune_study_count
         except AssertionError:
-            sys.err.write('Error: {} has {} or fewer studies\n'.format(task, tune_study_count))
+            sys.stderr.write('Error: {} has {} or fewer studies\n'.format(task, tune_study_count))
             sys.exit(1)
 
         task_tune_dirs = random.sample(task_dirs, tune_study_count)
@@ -571,7 +571,7 @@ if __name__ == '__main__':
 
     if args.multitask:
         # TODO extract classes from labeled classes file
-        classes = ['sepsis', 'tb']
+        classes = ['sepsis', 'tb', 'lupus']
 
         representation = model.ExpressionRepresentation
         data_dirs = util.get_data_dirs(args.data_dir)
