@@ -4,6 +4,8 @@ import argparse
 import logging
 import numpy as np
 import random
+import os
+import sys
 import time
 
 import torch
@@ -241,7 +243,6 @@ def train_with_erm(classifier, map_file, train_dirs, tune_dirs, gene_file, num_e
     results: dict
         A dictionary containing lists tracking different loss metrics across epochs
     '''
-
     sample_to_label = util.parse_map_file(map_file)
 
     # Prepare data
@@ -261,8 +262,8 @@ def train_with_erm(classifier, map_file, train_dirs, tune_dirs, gene_file, num_e
     optimizer = optim.Adam(classifier.parameters(), lr=1e-5)
 
     if logger is not None:
-        logger.info('Training with {} training samples'.format(len(train_dataset)))
-        logger.info('Tuning with {} tuning samples'.format(len(tune_dataset)))
+        logger.info('Training with {} training and {} tuning samples'.format(len(train_dataset)),
+                                                                             len(tune_dataset))
 
     class_weights = util.get_class_weights(train_loader)
 
@@ -350,6 +351,176 @@ def train_with_erm(classifier, map_file, train_dirs, tune_dirs, gene_file, num_e
         return results
 
 
+def train_multitask(representation, labels, map_file, data_dirs, gene_file, num_epochs,
+                    device, save_file_dir=None, logger=None, tune_study_count=2):
+    '''
+    Train a multitask learning model to classify multiple diseases from gene expression data
+
+    Arguments
+    ---------
+    representation: pytorch.nn.Module to be used as a gene expression representation, for example
+        model.ExpressionRepresentation
+    labels: list of strs
+        The disease labels to train act as different tasks for the model. Note that the label
+        'healthy' should not be in this list, as most studies will contain healthy samples
+    map_file: string or Path
+        The file created by label_samples.py to be used to match samples to labels
+    data_dirs: list of strs or list of Paths
+        The directories containing gene expression data for various experiments
+    gene_file: string or Path
+        The path to the file containing the list of genes to use in the model
+    num_epochs: int
+        The number of times the model should be trained on all the data
+    device: torch.device
+        The device to train the model on (either a gpu or a cpu)
+    save_file_dir: str
+        The directory to save the models to
+    logger: logging.logger
+        The python logger object to handle printing logs
+    tune_study_count: int
+        The number of studies to assign to the tune set
+
+    Returns
+    -------
+    results: dict
+        A dictionary containing lists tracking different loss metrics across epochs
+    '''
+    sample_to_label = util.parse_map_file(map_file)
+
+    num_genes = util.get_gene_count(gene_file)
+    # Initialize the representation portion of the model
+    representation = representation(num_genes).double().to(device)
+
+    task_to_results = {}
+    for task in labels:
+        _, task_dirs = util.extract_dirs_with_label(data_dirs, task, sample_to_label)
+        # Do binary classification; the disease will always be encoded as label 1
+        label_to_encoding = {task: 1, 'healthy': 0}
+
+        # Make sure there are enough studies for the tune set size
+        try:
+            assert len(task_dirs) > tune_study_count
+        except AssertionError:
+            sys.stderr.write('Error: {} has {} or fewer studies\n'.format(task, tune_study_count))
+            sys.exit(1)
+
+        task_tune_dirs = random.sample(task_dirs, tune_study_count)
+        task_train_dirs = [dir_ for dir_ in task_dirs if dir_ not in task_tune_dirs]
+
+        train_dataset = dataset.ExpressionDataset(task_train_dirs, sample_to_label,
+                                                  label_to_encoding, gene_file)
+        tune_dataset = dataset.ExpressionDataset(task_tune_dirs, sample_to_label,
+                                                 label_to_encoding, gene_file)
+
+        train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, num_workers=2,
+                                  pin_memory=True)
+        tune_loader = DataLoader(tune_dataset, batch_size=16, num_workers=2,
+                                 pin_memory=True)
+
+        task_head = model.MultitaskHead(representation.final_size).double().to(device)
+
+        if logger is not None:
+            log_string = 'Training with {} training and {} tuning samples'
+            logger.info(log_string.format(len(train_dataset), len(tune_dataset)))
+
+        optimizer = optim.Adam(list(representation.parameters()) + list(task_head.parameters()),
+                               lr=1e-5)
+        class_weights = util.get_class_weights(train_loader)
+
+        # Calculate baseline tune set prediction accuracy (just pick the largest class)
+        tune_label_counts, _ = util.get_value_counts(tune_loader)
+        baseline = max(list(tune_label_counts.values())) / len(tune_dataset)
+
+        results = {'train_loss': [], 'tune_loss': [], 'train_acc': [], 'tune_acc': [],
+                   'baseline': baseline}
+
+        try:
+            best_tune_loss = None
+
+            for epoch in tqdm_notebook(range(num_epochs)):
+                train_loss = 0
+                train_correct = 0
+                # Set training mode
+                for batch in train_loader:
+                    expression, labels, ids = batch
+                    expression = expression.to(device)
+                    labels = labels.to(device).double()
+
+                    # Get weights to handle the class imbalance
+                    batch_weights = [class_weights[int(label)] for label in labels]
+                    batch_weights = torch.DoubleTensor(batch_weights).to(device)
+
+                    loss_function = nn.BCEWithLogitsLoss(weight=batch_weights)
+                    optimizer.zero_grad()
+                    output = task_head(representation(expression))
+                    loss = loss_function(output, labels)
+                    train_loss += float(loss)
+
+                    train_correct += util.count_correct(output, labels)
+
+                    loss.backward()
+                    optimizer.step()
+
+                # Disable the gradient and switch into model evaluation mode
+                with torch.no_grad():
+                    representation.eval()
+                    task_head.eval()
+
+                    tune_loss = 0
+                    tune_correct = 0
+                    for tune_batch in tune_loader:
+                        expression, labels, ids = tune_batch
+                        expression = expression.to(device)
+                        tune_labels = labels.to(device).double()
+
+                        loss_function = nn.BCEWithLogitsLoss()
+
+                        tune_output = task_head(representation(expression))
+
+                        loss = loss_function(tune_output, tune_labels)
+                        tune_loss += float(loss)
+                        tune_correct += util.count_correct(tune_output, tune_labels)
+
+                    # Save the model
+                    if save_file_dir is not None:
+                        if best_tune_loss is None or tune_loss < best_tune_loss:
+                            best_tune_loss = tune_loss
+
+                            head_file_name = 'erm_{}_head.pkl'.format(task)
+                            head_file_path = os.path.join(save_file_dir, head_file_name)
+                            torch.save(task_head, head_file_path)
+
+                train_accuracy = train_correct / len(train_dataset)
+                tune_accuracy = tune_correct / len(tune_dataset)
+
+                if logger is not None:
+                    logger.info('Epoch {}'.format(epoch))
+                    logger.info('Train loss: {}'.format(train_loss / len(train_dataset)))
+                    logger.info('Tune loss: {}'.format(tune_loss / len(tune_dataset)))
+                    logger.info('Train accuracy: {}'.format(train_accuracy))
+                    logger.info('Tune accuracy: {}'.format(tune_accuracy))
+                    logger.info('Baseline accuracy: {}'.format(baseline))
+
+                results['train_loss'].append(train_loss / len(train_dataset))
+                results['tune_loss'].append(tune_loss / len(tune_dataset))
+                results['train_acc'].append(train_accuracy)
+                results['tune_acc'].append(tune_accuracy)
+        except Exception as e:
+            # Print error
+            logger.error(e, exc_info=True)
+        finally:
+            if save_file_dir is not None:
+                representation_file = os.path.join(save_file_dir, 'erm_representation.pkl')
+                torch.save(representation, representation_file)
+
+            results = util.add_genes_to_results(results, gene_file)
+            results = util.add_study_ids_to_results(results, task_train_dirs, task_tune_dirs)
+
+            task_to_results[task] = results
+
+    return task_to_results
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='This script trains a classifier to differentiate'
                                                  ' between sepsis and healthy gene expresssion')
@@ -373,7 +544,9 @@ if __name__ == '__main__':
                         'classification loss penalty with the study invariance penalty. A larger '
                         'value of loss_scaling_factor will cause the loss to count for more and '
                         'the invariance penalty to count for less', default=1e0)
-    parser.add_argument('--no_gpu', help='Use the CPU to train the network', action='store_false')
+    parser.add_argument('--no_gpu', help='Use the CPU to train the network', action='store_true')
+    parser.add_argument('--multitask', help='Use multitask learning instead of '
+                                            'training on one dataset', action='store_true')
     args = parser.parse_args()
 
     device = None
@@ -396,23 +569,33 @@ if __name__ == '__main__':
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-    label_to_encoding = {'sepsis': 1, 'healthy': 0}
-    classifier = model.ThreeLayerNet
+    if args.multitask:
+        # TODO extract classes from labeled classes file
+        classes = ['sepsis', 'tb', 'lupus']
 
-    data_dirs = util.get_data_dirs(args.data_dir)
+        representation = model.ExpressionRepresentation
+        data_dirs = util.get_data_dirs(args.data_dir)
 
-    train_dirs, tune_dirs = util.train_tune_split(data_dirs, args.tune_study_count)
+        results = train_multitask(representation, classes, args.map_file, data_dirs,
+                                  args.gene_file, args.num_epochs, device, '../logs', logger,
+                                  args.tune_study_count)
 
-    results = train_with_irm(classifier, args.map_file, train_dirs, tune_dirs, args.gene_file,
-                             args.num_epochs, args.loss_scaling_factor,
-                             label_to_encoding, device, logger)
-    out_path = args.out_file + '_irm.pkl'
-    util.save_results(args.out_file, results)
+    else:
+        label_to_encoding = {'sepsis': 1, 'healthy': 0}
+        classifier = model.ThreeLayerNet
 
-    results = train_with_erm(classifier, args.map_file, train_dirs, tune_dirs, args.gene_file,
-                             args.num_epochs, label_to_encoding, device, logger)
+        data_dirs = util.get_data_dirs(args.data_dir)
 
-    out_path = args.out_file + '_vanilla.pkl'
-    util.save_results(out_path, results)
+        train_dirs, tune_dirs = util.train_tune_split(data_dirs, args.tune_study_count)
 
-    # TODO model checkpoints/early stopping
+        results = train_with_irm(classifier, args.map_file, train_dirs, tune_dirs, args.gene_file,
+                                 args.num_epochs, args.loss_scaling_factor,
+                                 label_to_encoding, device, logger)
+        out_path = args.out_file + '_irm.pkl'
+        util.save_results(args.out_file, results)
+
+        results = train_with_erm(classifier, args.map_file, train_dirs, tune_dirs, args.gene_file,
+                                 args.num_epochs, label_to_encoding, device, logger)
+
+        out_path = args.out_file + '_vanilla.pkl'
+        util.save_results(out_path, results)
