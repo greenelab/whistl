@@ -19,9 +19,6 @@ import dataset
 import model
 import util
 
-# import pudb
-# pudb.set_trace()
-
 
 def compute_irm_penalty(loss, dummy_w):
     '''Calculate the invariance penalty for the classifier. This penalty is the norm of the
@@ -355,8 +352,7 @@ def train_with_erm(classifier, map_file, train_dirs, tune_dirs, gene_file, num_e
 
 
 def train_multitask(representation, labels, map_file, data_dirs, gene_file, num_epochs,
-                    loss_scaling_factor, device, save_file_dir=None, logger=None,
-                    tune_study_count=2):
+                    device, save_file_dir=None, logger=None, tune_study_count=2):
     '''
     Train a multitask learning model to classify multiple diseases from gene expression data
 
@@ -375,10 +371,6 @@ def train_multitask(representation, labels, map_file, data_dirs, gene_file, num_
         The path to the file containing the list of genes to use in the model
     num_epochs: int
         The number of times the model should be trained on all the data
-    loss_scaling_factor: float
-        A hyperparameter that balances the classification loss penalty with the study invariance
-        penalty. A larger value of loss_scaling_factor will cause the loss to count for more and
-        the invariance penalty to count for less
     device: torch.device
         The device to train the model on (either a gpu or a cpu)
     save_file_dir: str
@@ -585,8 +577,8 @@ if __name__ == '__main__':
         data_dirs = util.get_data_dirs(args.data_dir)
 
         results = train_multitask(representation, classes, args.map_file, data_dirs,
-                                  args.gene_file, args.num_epochs, args.loss_scaling_factor,
-                                  device, '../logs', logger, args.tune_study_count)
+                                  args.gene_file, args.num_epochs, device, '../logs', logger,
+                                  args.tune_study_count)
 
     else:
         label_to_encoding = {'sepsis': 1, 'healthy': 0}
