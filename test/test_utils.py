@@ -11,7 +11,7 @@ import numpy as np
 
 whistl_path = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(whistl_path + '/../whistl')
-import util
+import utils
 
 
 data = {'sample1': [1, 1], 'sample2': [2, 2], 'sample3': [3, 3]}

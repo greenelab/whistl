@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from torch.utils.data import Dataset
 
-import util
+import utils
 
 
 def get_data_dirs(data_root):

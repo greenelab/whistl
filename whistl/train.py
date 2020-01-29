@@ -14,9 +14,9 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm_notebook
 
-import dataset
-import model
-import util
+import datasets
+import models
+import utils
 
 
 def compute_irm_penalty(loss, dummy_w):
