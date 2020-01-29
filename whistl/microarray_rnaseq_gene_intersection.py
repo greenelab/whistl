@@ -16,11 +16,13 @@ test_dir = '../data/test'
 # List everything in data_dir
 subfiles = [os.path.join(train_dir, f) for f in os.listdir(train_dir)]
 # Keep only data directories, not anything else that might be in data_dir
-train_dirs = [f for f in subfiles if ('SRP' in f or 'GSE' in f) and os.path.isdir(f)]
+train_dirs = [f for f in subfiles if ('SRP' in f or 'GSE' in f or 'E-M' in f)
+              and os.path.isdir(f)]
 
 subfiles = [os.path.join(test_dir, f) for f in os.listdir(test_dir)]
 # Keep only data directories, not anything else that might be in data_dir
-test_dirs = [f for f in subfiles if ('SRP' in f or 'GSE' in f) and os.path.isdir(f)]
+test_dirs = [f for f in subfiles if ('SRP' in f or 'GSE' in f or 'E-M' in f)
+             and os.path.isdir(f)]
 
 df_list = []
 for data_dir in train_dirs:
