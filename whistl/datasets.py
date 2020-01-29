@@ -130,7 +130,7 @@ def get_dataframe_from_dirs(data_dirs, classes, sample_to_label, genes_to_use):
     labels: numpy.array
     '''
     disease_and_healthy_classes = classes + ['healthy']
-    label_to_encoding = util.generate_encoding(disease_and_healthy_classes)
+    label_to_encoding = utils.generate_encoding(disease_and_healthy_classes)
 
     # Extract data from each directory
     df_list = []
@@ -198,14 +198,14 @@ def parse_study_dir(data_dir, sample_to_label, label_to_encoding, genes_to_keep)
 
     # Remove samples that don't fall into a class of interest
     labels_to_keep = label_to_encoding.keys()
-    curr_df = util.keep_samples_with_labels(curr_df, sample_to_label, labels_to_keep)
+    curr_df = utils.keep_samples_with_labels(curr_df, sample_to_label, labels_to_keep)
 
     # If keep_samples_with_labels returns None, we should return None for the labels as well
     if curr_df is None:
         return (None, None)
 
     # Retrieve labels for each sample
-    study_labels = util.get_labels(curr_df, sample_to_label, label_to_encoding)
+    study_labels = utils.get_labels(curr_df, sample_to_label, label_to_encoding)
 
     curr_df = curr_df.loc[genes_to_keep, :]
 

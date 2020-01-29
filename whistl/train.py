@@ -75,16 +75,16 @@ def train_with_irm(classifier, train_loaders, tune_loader, num_epochs, loss_scal
     classifier.to(device)
     optimizer = optim.Adam(classifier.parameters(), lr=1e-5)
 
-    # TODO make a function equivalent to util.get_class_weights
+    # TODO make a function equivalent to utils.get_class_weights
     class_weights = {0: .9, 1: .1}
 
-    tune_label_counts, _ = util.get_value_counts(tune_loader)
+    tune_label_counts, _ = utils.get_value_counts(tune_loader)
     baseline = max(list(tune_label_counts.values())) / len(tune_dataset)
 
     results = {'train_loss': [], 'tune_loss': [], 'train_acc': [], 'tune_acc': [],
                'baseline': baseline, 'train_penalty': [], 'train_raw_loss': []}
 
-    train_sample_count = sum([util.count_items_in_dataloader(dl) for dl in train_loaders])
+    train_sample_count = sum([utils.count_items_in_dataloader(dl) for dl in train_loaders])
 
     try:
         dummy_w = torch.nn.Parameter(torch.FloatTensor([1.0])).to(device)
@@ -114,7 +114,7 @@ def train_with_irm(classifier, train_loaders, tune_loader, num_epochs, loss_scal
                     pred = classifier(expression)
                     loss = loss_function(pred * dummy_w, labels)
                     train_raw_loss += loss
-                    train_correct += util.count_correct(pred, labels)
+                    train_correct += utils.count_correct(pred, labels)
 
                 # This penalty is the norm of the gradient of 1 * the loss function.
                 # The penalty helps keep the model from ignoring one study to the benefit
@@ -143,7 +143,7 @@ def train_with_irm(classifier, train_loaders, tune_loader, num_epochs, loss_scal
                     tune_preds = classifier(tune_expression)
                     loss = loss_function(tune_preds, tune_labels)
                     tune_loss += loss.item()
-                    tune_correct += util.count_correct(tune_preds, tune_labels)
+                    tune_correct += utils.count_correct(tune_preds, tune_labels)
 
                 # Save the model
                 if save_file is not None:
@@ -178,8 +178,8 @@ def train_with_irm(classifier, train_loaders, tune_loader, num_epochs, loss_scal
     except Exception as e:
         logger.error(e, exc_info=True)
     finally:
-        # results = util.add_genes_to_results(results, gene_file)
-        results = util.add_study_ids_to_results(results, train_dirs, tune_dirs)
+        # results = utils.add_genes_to_results(results, gene_file)
+        results = utils.add_study_ids_to_results(results, train_dirs, tune_dirs)
         return results
 
 
@@ -247,10 +247,10 @@ def train_with_erm(classifier, train_loader, tune_loader, num_epochs, logger=Non
     classifier = classifier.to(device)
     optimizer = optim.Adam(classifier.parameters(), lr=1e-5)
 
-    class_weights = util.get_class_weights(train_loader)
+    class_weights = utils.get_class_weights(train_loader)
 
     # Calculate baseline tune set prediction accuracy (just pick the largest class)
-    tune_label_counts, _ = util.get_value_counts(tune_loader)
+    tune_label_counts, _ = utils.get_value_counts(tune_loader)
     baseline = max(list(tune_label_counts.values())) / len(tune_dataset)
 
     results = {'train_loss': [], 'tune_loss': [], 'train_acc': [], 'tune_acc': [],
@@ -282,7 +282,7 @@ def train_with_erm(classifier, train_loader, tune_loader, num_epochs, logger=Non
                 optimizer.step()
 
                 train_loss += loss.item()
-                train_correct += util.count_correct(output, labels)
+                train_correct += utils.count_correct(output, labels)
 
             # Disable the gradient and switch into model evaluation mode
             with torch.no_grad():
@@ -303,7 +303,7 @@ def train_with_erm(classifier, train_loader, tune_loader, num_epochs, logger=Non
                     tune_output = classifier(expression)
                     loss = loss_function(tune_output, tune_labels)
                     tune_loss += loss.item()
-                    tune_correct += util.count_correct(tune_output, tune_labels)
+                    tune_correct += utils.count_correct(tune_output, tune_labels)
 
                 # Save the model
                 if save_file is not None:
@@ -330,7 +330,7 @@ def train_with_erm(classifier, train_loader, tune_loader, num_epochs, logger=Non
         # Print error
         logger.error(e, exc_info=True)
     finally:
-        results = util.add_study_ids_to_results(results, train_dirs, tune_dirs)
+        results = utils.add_study_ids_to_results(results, train_dirs, tune_dirs)
         return results
 
 
@@ -387,38 +387,38 @@ if __name__ == '__main__':
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-    data_dirs = dataset.get_data_dirs(args.data_dir)
+    data_dirs = datasets.get_data_dirs(args.data_dir)
 
     # TODO do this better
     classes = ['tb', 'sepsis']
-    sample_to_label = util.parse_map_file(args.map_file)
+    sample_to_label = utils.parse_map_file(args.map_file)
 
     mode = args.mode.lower().strip()
 
     if mode == 'irm':
-        intersection_genes = util.parse_gene_file(args.gene_file)
+        intersection_genes = utils.parse_gene_file(args.gene_file)
 
         disease_train_data_dirs = []
         disease_tune_data_dirs = []
         for disease in classes:
-            _, disease_dirs = dataset.extract_dirs_with_label(data_dirs, disease, sample_to_label)
-            train_dirs, tune_dirs = util.train_tune_split(disease_dirs, args.tune_study_count)
+            _, disease_dirs = datasets.extract_dirs_with_label(data_dirs, disease, sample_to_label)
+            train_dirs, tune_dirs = utils.train_tune_split(disease_dirs, args.tune_study_count)
 
             disease_train_data_dirs.extend(train_dirs)
             disease_tune_data_dirs.extend(tune_dirs)
 
         train_loaders = []
         for data_dir in disease_train_data_dirs:
-            train_dataset = dataset.RefineBioDataset([data_dir], classes, sample_to_label,
-                                                     intersection_genes)
+            train_dataset = datasets.RefineBioDataset([data_dir], classes, sample_to_label,
+                                                      intersection_genes)
             train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, pin_memory=True)
             train_loaders.append(train_loader)
 
-        tune_dataset = dataset.RefineBioDataset(disease_tune_data_dirs, classes, sample_to_label,
-                                                intersection_genes)
+        tune_dataset = datasets.RefineBioDataset(disease_tune_data_dirs, classes, sample_to_label,
+                                                 intersection_genes)
         tune_loader = DataLoader(tune_dataset, batch_size=16, num_workers=2, pin_memory=True)
 
-        classifier = model.ThreeLayerNet(len(intersection_genes))
+        classifier = models.ThreeLayerNet(len(intersection_genes))
 
         results = train_with_irm(classifier, train_loaders, tune_loader, args.num_epochs,
                                  args.loss_scaling_factor, logger)
@@ -427,24 +427,24 @@ if __name__ == '__main__':
         disease_train_data_dirs = []
         disease_tune_data_dirs = []
         for disease in classes:
-            _, disease_dirs = dataset.extract_dirs_with_label(data_dirs, disease, sample_to_label)
-            train_dirs, tune_dirs = util.train_tune_split(disease_dirs, args.tune_study_count)
+            _, disease_dirs = datasets.extract_dirs_with_label(data_dirs, disease, sample_to_label)
+            train_dirs, tune_dirs = utils.train_tune_split(disease_dirs, args.tune_study_count)
 
             disease_train_data_dirs.extend(train_dirs)
             disease_tune_data_dirs.extend(tune_dirs)
 
             # TODO check number of tune data dirs
 
-        intersection_genes = util.parse_gene_file(args.gene_file)
-        train_dataset = dataset.RefineBioDataset(disease_train_data_dirs, classes, sample_to_label,
+        intersection_genes = utils.parse_gene_file(args.gene_file)
+        train_dataset = datasets.RefineBioDataset(disease_train_data_dirs, classes,
+                                                  sample_to_label, intersection_genes)
+        tune_dataset = datasets.RefineBioDataset(disease_tune_data_dirs, classes, sample_to_label,
                                                  intersection_genes)
-        tune_dataset = dataset.RefineBioDataset(disease_tune_data_dirs, classes, sample_to_label,
-                                                intersection_genes)
         train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, num_workers=2,
                                   pin_memory=True)
         tune_loader = DataLoader(tune_dataset, batch_size=16, num_workers=2, pin_memory=True)
 
-        classifier = model.ThreeLayerNet(len(intersection_genes))
+        classifier = models.ThreeLayerNet(len(intersection_genes))
         results = train_with_erm(classifier, train_loader, tune_loader, args.num_epochs, logger)
 
     if mode == 'multitask':
@@ -452,20 +452,20 @@ if __name__ == '__main__':
         tune_loaders = []
         heads = []
 
-        intersection_genes = util.parse_gene_file(args.gene_file)
+        intersection_genes = utils.parse_gene_file(args.gene_file)
 
-        representation = model.ExpressionRepresentation(len(intersection_genes))
+        representation = models.ExpressionRepresentation(len(intersection_genes))
 
         for disease in classes:
-            _, disease_dirs = dataset.extract_dirs_with_label(data_dirs, disease, sample_to_label)
-            train_dirs, tune_dirs = util.train_tune_split(disease_dirs, args.tune_study_count)
+            _, disease_dirs = datasets.extract_dirs_with_label(data_dirs, disease, sample_to_label)
+            train_dirs, tune_dirs = utils.train_tune_split(disease_dirs, args.tune_study_count)
 
             # Instead of making a list with all the directories, make a list of lists where each
             # entry is a list of directories corresponding to a disease
-            train_dataset = dataset.RefineBioDataset(train_dirs, [disease], sample_to_label,
+            train_dataset = datasets.RefineBioDataset(train_dirs, [disease], sample_to_label,
+                                                      intersection_genes)
+            tune_dataset = datasets.RefineBioDataset(tune_dirs, [disease], sample_to_label,
                                                      intersection_genes)
-            tune_dataset = dataset.RefineBioDataset(tune_dirs, [disease], sample_to_label,
-                                                    intersection_genes)
             train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, num_workers=2,
                                       pin_memory=True)
             tune_loader = DataLoader(tune_dataset, batch_size=16, num_workers=2, pin_memory=True)
@@ -473,7 +473,7 @@ if __name__ == '__main__':
             train_loaders.append(train_loader)
             tune_loaders.append(tune_loader)
 
-            head = model.MultitaskHead(representation.final_size)
+            head = models.MultitaskHead(representation.final_size)
             heads.append(head)
 
         results = train_multitask(train_loaders, tune_loaders, representation, heads,
