@@ -22,11 +22,14 @@ def count_items_in_dataloader(dataloader):
     '''
     item_count = 0
     for batch in dataloader:
-        # TODO this should be safe since there should always be at least one thing returned right?
-        X = batch[0]
+        try:
+            X = batch[0]
 
-        # Add the size of the batch to the item count
-        item_count += X.shape[0]
+            # Add the size of the batch to the item count
+            item_count += X.shape[0]
+        except KeyError:
+            # The dataloader shouldn't return an empty batch, so this may be overkil
+            pass
 
     return item_count
 

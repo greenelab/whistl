@@ -1,4 +1,4 @@
-'''This script trains a classifier to differentiate between sepsis and healthy gene expresssion'''
+'''This module contains logic for training gene expression models in various ways'''
 
 import argparse
 import logging
@@ -178,7 +178,6 @@ def train_with_irm(classifier, train_loaders, tune_loader, num_epochs, loss_scal
     except Exception as e:
         logger.error(e, exc_info=True)
     finally:
-        # results = utils.add_genes_to_results(results, gene_file)
         results = utils.add_study_ids_to_results(results, train_dirs, tune_dirs)
         return results
 
@@ -335,8 +334,9 @@ def train_with_erm(classifier, train_loader, tune_loader, num_epochs, logger=Non
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='This script trains a classifier to differentiate'
-                                                 ' between sepsis and healthy gene expresssion')
+    parser = argparse.ArgumentParser(description='This module contains logic to train '
+                                                 'classifiers on gene expression')
+
     parser.add_argument('map_file',
                         help='The label: sample mapping file created by label_samples.py')
     parser.add_argument('data_dir',
