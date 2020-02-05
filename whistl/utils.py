@@ -7,6 +7,33 @@ import random
 import numpy as np
 
 
+def count_items_in_dataloader(dataloader):
+    '''Calculate the total number of items in a dataset by iterating through a dataloader
+
+    Arguments
+    ---------
+    dataloader: pytorch DataLoader object
+        The dataloader to be iterated over
+
+    Returns
+    -------
+    item_count: int
+        The number of items in the dataset
+    '''
+    item_count = 0
+    for batch in dataloader:
+        try:
+            X = batch[0]
+
+            # Add the size of the batch to the item count
+            item_count += X.shape[0]
+        except KeyError:
+            # The dataloader shouldn't return an empty batch, so this may be overkil
+            pass
+
+    return item_count
+
+
 def get_gene_count(gene_file):
     '''
 
@@ -61,74 +88,6 @@ def generate_encoding(classes):
             label_to_encoding[classes[i]] = encoding
 
         return label_to_encoding
-
-
-def get_data_dirs(data_root):
-    ''' Extract all the data subdirectories in a given root directory
-
-    Arguments
-    ---------
-    data_root: str or Path
-        The root directory whose subdirectories contain gene expression data
-
-    Returns
-    -------
-    data_dirs: list of str or Path
-        The list of directories containing gene expression data
-    '''
-    # List everything in data_root
-    subfiles = [os.path.join(data_root, f) for f in os.listdir(data_root)]
-    # Keep only data directories, not anything else that might be in data_root
-    data_dirs = [f for f in subfiles if ('SRP' in f or 'GSE' in f) and os.path.isdir(f)]
-
-    return data_dirs
-
-
-def extract_dirs_with_label(data_dirs, disease_label, sample_to_label):
-    ''' Split the list of directories passed in into those that contain samples with a given
-    disease, and those that don't
-
-    Arguments
-    ---------
-    data_dirs: list of str or Path
-        A list of directories containing gene expression data
-    disease_label: str
-        The name of the disease whose samples will be used in testing
-    sample_to_label: dict
-        A string to string dict mapping sample ids to their corresponding label string.
-        E.g. {'GSM297791': 'sepsis'}
-
-    Returns
-    -------
-    dirs_without_label: list of str or Path
-        The directories from data_dirs not containing any samples corresponding to disease_label
-    dirs_with_label: list of str or Path
-        The directories from data_dirs that do contain samples with the provided disease
-    '''
-    dirs_without_label = []
-    dirs_with_label = []
-
-    for data_dir in data_dirs:
-        study = os.path.basename(os.path.normpath(data_dir))
-        study_file_name = study + '.tsv'
-        data_file = os.path.join(data_dir, study_file_name)
-
-        sample_ids = None
-        with open(data_file, 'r') as in_file:
-            # The tsv header contains all the sample ids for the study
-            sample_ids = in_file.readline()
-            sample_ids = sample_ids.strip().split('\t')
-
-        for sample_id in sample_ids:
-            if sample_id in sample_to_label:
-                if sample_to_label[sample_id] == disease_label:
-                    dirs_with_label.append(data_dir)
-                    break
-        else:
-            # If the the dir isn't added to dirs_with_label, add to dirs_without_label
-            dirs_without_label.append(data_dir)
-
-    return dirs_without_label, dirs_with_label
 
 
 def add_genes_to_results(results, gene_file):
@@ -206,13 +165,13 @@ def save_results(out_file_path, results):
         pickle.dump(results, out_file)
 
 
-def train_tune_split(data_dir, tune_study_count):
+def train_tune_split(data_dirs, tune_study_count):
     '''Split the data directories into train and tune directories
 
     Arguments
     ---------
-    data_dir: str or Path
-        The directory containing subdirectories with gene expression data
+    data_dirs: str or Path
+        The directories corresponding to different transcriptomic studies
     tune_study_count:
         The number of studies to put in the tuning set
 
@@ -223,11 +182,6 @@ def train_tune_split(data_dir, tune_study_count):
     tune_dirs: list of strs
         The directories to be used for model tuning
     '''
-    # List everything in data_dir
-    subfiles = [os.path.join(data_dir, f) for f in os.listdir(data_dir)]
-    # Keep only data directories, not anything else that might be in data_dir
-    data_dirs = [f for f in subfiles if ('SRP' in f or 'GSE' in f) and os.path.isdir(f)]
-
     # Pull out directories for tuning, then put everything else in train_dirs
     tune_dirs = random.sample(data_dirs, tune_study_count)
     train_dirs = [dir_ for dir_ in data_dirs if dir_ not in tune_dirs]
@@ -418,7 +372,7 @@ def get_value_counts(data_loader):
     for batch in data_loader:
         _, labels, _ = batch
         for label in labels:
-            if int(label) not in value_counts:
+            if label not in value_counts:
                 value_counts[int(label)] = 1
             else:
                 value_counts[int(label)] += 1
