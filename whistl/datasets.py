@@ -1,5 +1,6 @@
 '''Functions for creating dataset objects from the raw data directories/compendia and otherwise
 decoupling the data access, and model training portions of the code'''
+import json
 import os
 
 import numpy as np
@@ -7,6 +8,110 @@ import pandas as pd
 from torch.utils.data import Dataset
 
 import utils
+
+
+def parse_metadata_file(metadata_path):
+    '''
+
+    Arguments
+    ---------
+    metadata_path: str or Path object
+        The file containing metadata for all samples in the compendium
+
+    Returns
+    -------
+    metadata: json
+        The json object stored at metadata_path
+    '''
+    with open(metadata_path) as metadata_file:
+        metadata = json.load(metadata_file)
+        return metadata
+
+
+def create_sample_to_study_mapping(metadata):
+    '''Generate a dictionary mapping each sample to the study it came from
+
+    Arguments
+    ---------
+    metadata: json
+        A json object containing the metadata for a study
+
+    Returns
+    -------
+    sample_to_study: dict
+        A dictionary mapping each sample accession to its corresponding study accession
+    '''
+    sample_to_study = {}
+
+    experiment_metadata = metadata['experiments']
+
+    for experiment in experiment_metadata:
+        try:
+            samples = experiment_metadata[experiment]['sample_accession_codes']
+            for sample in samples:
+                sample_to_study[sample] = experiment
+        except KeyError:
+            # If an experiment doesn't have any samples for some reason, skip it
+            pass
+
+    return sample_to_study
+
+
+def create_study_to_sample_mapping(metadata):
+    '''Create a dictionary mapping study accessions to the accessions of samples in the study
+
+    Arguments
+    ---------
+    metadata: json
+        A json object containing the metadata for a study
+
+    Returns
+    -------
+    study_to_sample: dict
+        A dict mapping study accessions to the accessions of samples they contain
+    '''
+    study_to_sample = {}
+
+    experiment_metadata = metadata['experiments']
+
+    for experiment in experiment_metadata:
+        try:
+            study_to_sample[experiment] = experiment_metadata[experiment]['sample_accession_codes']
+        except KeyError:
+            # If an experiment doesn't have any samples for some reason, skip it
+            pass
+
+    return study_to_sample
+
+
+def get_dataframe_from_compendium(studies, classes, sample_to_label, sample_to_study):
+    '''Aggregate gene expression data corresponding to studies and diseases of interest using
+    the refine.bio human compendium
+
+    Arguments
+    ---------
+    studies: list of str
+        A list of the accessions for studies to be included in the dataset
+    classes: list of str
+        A list of the phenotypes to be included in the dataset
+    sample_to_label: dict
+        A dict mapping samples accessions to their corresponding phenotype label
+    study_to_sample: dict
+        A dict mapping study accessions to the accessions of samples they contain
+
+    Returns
+    -------
+    selected_studies_df: pandas.DataFrame
+        A dataframe containing the expression data for the studies in data_dirs
+    labels: numpy.array
+    '''
+
+    # Get samples from studies
+    # Keep only samples corresponding to correct class
+
+
+
+    raise NotImplementedError
 
 
 def get_data_dirs(data_root):
@@ -227,6 +332,45 @@ class RefineBioDataset(Dataset):
         data, labels = get_dataframe_from_dirs(data_dirs, classes, sample_to_label,
                                                genes_to_use)
 
+        self.gene_expression = data
+        self.labels = labels
+
+    def __getitem__(self, idx):
+        '''
+
+        Arguments
+        ---------
+        idx: int
+            The index of the sample to retrieve
+
+        Returns
+        -------
+        sample: numpy.array
+            The gene expression information for the sample at index idx
+        label: int
+            The label for the sample at index idx
+        id_: string
+            The sample identifier for the given sample
+        '''
+        sample = self.gene_expression.iloc[:, idx].values
+        label = np.array(self.labels[idx])
+        id_ = self.gene_expression.columns[idx]
+
+        return sample, label, id_
+
+    def __len__(self):
+        '''Provides the number of samples in the dataset'''
+        return len(self.labels)
+
+
+class CompendiumDataset(Dataset):
+    '''A dataset of one or more studies pulled from the refine.bio human compendium'''
+
+    def __init__(self, studies, classes, sample_to_label, metadata_file):
+        metadata = parse_metadata_file(metadata_file)
+        sample_to_study = create_sample_to_study_mapping(metadata)
+        data, labels = get_dataframe_from_compendium(studies, classes, sample_to_label,
+                                                     sample_to_study)
         self.gene_expression = data
         self.labels = labels
 
