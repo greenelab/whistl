@@ -1,5 +1,6 @@
 '''Functions for creating dataset objects from the raw data directories/compendia and otherwise
 decoupling the data access, and model training portions of the code'''
+import functools
 import json
 import os
 
@@ -8,6 +9,51 @@ import pandas as pd
 from torch.utils.data import Dataset
 
 import utils
+
+
+def get_labels_for_expression_df(df, sample_to_label, encoder):
+    '''Get the encoded labels corresponding to the dataframe's samples' phenotypes
+
+    Arguments
+    ---------
+    df: pandas DataFrame
+        The gene expression data to get labels for
+    sample_to_label: dict
+        A dict mapping samples accessions to their corresponding phenotype label
+    encoder: sklearn.preprocessing.LabelEncoder
+        An encoder object that maps phenotype names to labels
+
+    Returns
+    -------
+    labels: list of strs
+    '''
+    samples = df.columns
+    labels = []
+
+    for sample in samples:
+        labels.append(sample_to_label[sample])
+    labels = encoder.transform(labels)
+
+    return labels
+
+
+@functools.lru_cache()
+def load_compendium_file(compendium_path):
+    '''Load the compendium data from a tsv file
+
+    Arguments
+    ---------
+    compendium_path: str or Path
+        The path to the tsv containing gene expression data
+
+    Returns
+    -------
+    expression_df: pandas DataFrame
+        A dataframe where the rows are genes and the columns are samples
+    '''
+    expression_df = pd.read_csv(compendium_path, sep='\t', index_col=0)
+
+    return expression_df
 
 
 def parse_metadata_file(metadata_path):
@@ -84,34 +130,67 @@ def create_study_to_sample_mapping(metadata):
     return study_to_sample
 
 
-def get_dataframe_from_compendium(studies, classes, sample_to_label, sample_to_study):
-    '''Aggregate gene expression data corresponding to studies and diseases of interest using
-    the refine.bio human compendium
+def subset_expression_by_study(expression_df, studies, sample_to_study):
+    '''Subset a dataframe to contain only the samples contained in the given studies
 
     Arguments
     ---------
-    studies: list of str
+    expression_df: pandas Dataframe
+        A dataframe where the rows are genes and the columns are sample
+    studies: list of strr
         A list of the accessions for studies to be included in the dataset
+    sample_to_study: dict
+        A dict mapping sample accessions to their corresponding studies
+
+    Returns
+    -------
+    subset_df: pandas DataFrame
+        The subset of the dataframe passed in containing only samples from the given studies
+    '''
+    study_set = set(studies)
+    samples_to_keep = []
+
+    all_samples = expression_df.columns
+
+    for sample in all_samples:
+        if sample_to_study[sample] in study_set:
+            samples_to_keep.append(sample)
+
+    subset_df = expression_df.loc[:, samples_to_keep]
+
+    return subset_df
+
+
+def subset_expression_by_class(expression_df, classes, sample_to_label):
+    '''Subset a dataframe to contain only samples with the phenotypes passed in
+
+    Arguments
+    ---------
+    expression_df: pandas Dataframe
+        A dataframe where the rows are genes and the columns are samples
     classes: list of str
         A list of the phenotypes to be included in the dataset
     sample_to_label: dict
         A dict mapping samples accessions to their corresponding phenotype label
-    study_to_sample: dict
-        A dict mapping study accessions to the accessions of samples they contain
 
     Returns
     -------
-    selected_studies_df: pandas.DataFrame
-        A dataframe containing the expression data for the studies in data_dirs
-    labels: numpy.array
+    subset_df: pandas.DataFrame
+        The subset of the dataframe passed in containing only samples with the given phenotypes
     '''
+    # It may be more efficient to just iterate over all samples in the dataframe.
+    # It shouldn't be a big difference either way, so I'll leave it be for now
+    labeled_samples = set(sample_to_label.keys())
+    intersect_samples = labeled_samples.intersection(expression_df.columns)
 
-    # Get samples from studies
-    # Keep only samples corresponding to correct class
+    samples_to_keep = []
+    for sample in intersect_samples:
+        if sample_to_label[sample] in classes:
+            samples_to_keep.append(sample)
 
+    subset_df = expression_df.loc[:, samples_to_keep]
 
-
-    raise NotImplementedError
+    return subset_df
 
 
 def get_data_dirs(data_root):
@@ -366,13 +445,36 @@ class RefineBioDataset(Dataset):
 class CompendiumDataset(Dataset):
     '''A dataset of one or more studies pulled from the refine.bio human compendium'''
 
-    def __init__(self, studies, classes, sample_to_label, metadata_file):
-        metadata = parse_metadata_file(metadata_file)
+    def __init__(self, studies, classes, sample_to_label, metadata_path, compendium_path, encoder):
+        '''Initialize a CompendiumDataset object
+
+        Arguments
+        ---------
+        studies: list of str
+            The accessions of studies to be included in the dataset
+        classes: list of str
+            The phenotypes to be included in the dataset
+        sample_to_label: dict
+            A dictionary mapping sample identifiers to their corresponding labels
+        metadata_path: str or Path object
+            The file containing metadata for all samples in the compendium
+        compendium_path: str or Path object
+            The path to the tsv containing gene expression data
+        encoder: sklearn.preprocessing.LabelEncoder
+            An encoder object that maps phenotype names to labels
+        '''
+
+        metadata = parse_metadata_file(metadata_path)
         sample_to_study = create_sample_to_study_mapping(metadata)
-        data, labels = get_dataframe_from_compendium(studies, classes, sample_to_label,
-                                                     sample_to_study)
+
+        all_data = load_compendium_file(compendium_path)
+        data = subset_expression_by_study(all_data, studies, sample_to_study)
+        data = subset_expression_by_class(data, classes, sample_to_label)
+        labels = get_labels_for_expression_df(data, sample_to_label, encoder)
+
         self.gene_expression = data
         self.labels = labels
+        self.encoder = encoder
 
     def __getitem__(self, idx):
         '''

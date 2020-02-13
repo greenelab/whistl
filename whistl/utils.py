@@ -35,7 +35,7 @@ def count_items_in_dataloader(dataloader):
 
 
 def get_gene_count(gene_file):
-    '''
+    '''Count the number of genes in a file produced by microarray_rnaseq_gene_intersection.py
 
     Arguments
     ---------
