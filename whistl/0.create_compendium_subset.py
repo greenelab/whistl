@@ -36,6 +36,6 @@ if __name__ == '__main__':
     # https://github.com/pandas-dev/pandas/issues/2654
     valid_sample_ids.append('Unnamed: 0')
 
-    compendium_df = pd.read_csv(compendium_path, sep='\t', index_col=0, usecols=valid_sample_ids, nrows=5)
+    compendium_df = pd.read_csv(compendium_path, sep='\t', index_col=0, usecols=valid_sample_ids)
 
     compendium_df.to_csv(args.out_path, sep='\t')
