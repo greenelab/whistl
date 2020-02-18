@@ -29,9 +29,6 @@ def unlabel_samples(labeled_samples, set_of_labeled_samples):
         if choice == 'no':
             return labeled_samples, set_of_labeled_samples
         elif choice == 'yes':
-            print('Current sample labels:')
-            print(labeled_samples)
-
             sample = input('Sample to remove: ').strip().upper()
             if sample in set_of_labeled_samples:
                 set_of_labeled_samples.remove(sample)
@@ -284,8 +281,8 @@ if __name__ == '__main__':
             else:
                 labeled_samples[sample_label] = [sample]
             set_of_labeled_samples.add(sample)
-
-        print('All samples are labeled!')
+        else:
+            print('All samples are labeled!')
 
         # If the user makes a mistake, give them the option to unlabel samples
         labeled_samples, set_of_labeled_samples = unlabel_samples(labeled_samples,
