@@ -1,4 +1,4 @@
-'''Save the subset of hte compendium that has already been labeled to allow faster loading'''
+'''Save the subset of the compendium that has already been labeled to allow faster loading'''
 import argparse
 
 import pandas as pd
@@ -9,12 +9,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('This script saves the subset of the compendium that has '
                                      'already been labeled to allow faster loading and training')
     parser.add_argument('compendium', help='The refine.bio file containing the gene expression '
-                                            'data to subset')
+                                           'data to subset')
     parser.add_argument('map_file', help='The file produced by label_samples with sample labels.')
     parser.add_argument('out_path', help='The location to write the resulting tsv to')
     args = parser.parse_args()
 
-    # Next ~20 lines graciously lifted from comendium_eda.ipynb
+    # Next ~20 lines graciously lifted from notebooks/eda/compendium_eda.ipynb
     sample_to_label = utils.parse_map_file(args.map_file)
     sample_ids = sample_to_label.keys()
 
