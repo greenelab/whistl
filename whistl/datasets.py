@@ -447,15 +447,21 @@ def create_sample_to_platform_mapping(metadata):
     sample_to_platform = {}
 
     experiment_metadata = metadata['experiments']
+    sample_metadata = metadata['samples']
 
+    sample_list = []
     for experiment in experiment_metadata:
         try:
-            samples = experiment_metadata[experiment]['refinebio_platform']
-            for sample in samples:
-                sample_to_platform[sample] = experiment
-        except KeyError:
+            experiment_samples = experiment_metadata[experiment]['sample_accession_codes']
+            sample_list.extend(experiment_samples)
+        except KeyError as e:
             # If an experiment doesn't have any samples for some reason, skip it
+            print(e)
             pass
+
+
+    for sample in sample_list:
+        sample_to_platform[sample] = sample_metadata[sample]['refinebio_platform'].lower()
 
     return sample_to_platform
 
@@ -520,11 +526,13 @@ class CompendiumDataset(Dataset):
         metadata = parse_metadata_file(metadata_path)
         all_data = load_compendium_file(compendium_path)
 
+        sample_ids = sample_to_label.keys()
+
         if mode == 'study':
             sample_to_study = create_sample_to_study_mapping(metadata)
             data = subset_expression_by_study(all_data, groups, sample_to_study)
         elif mode == 'platform':
-            sample_to_platform = create_sample_to_platform_mapping(metadata)
+            sample_to_platform = utils.map_sample_to_platform(metadata, sample_ids)
             data = subset_expression_by_platform(all_data, groups, sample_to_platform)
         else:
             print("Valid modes are 'study' and 'platform'")
