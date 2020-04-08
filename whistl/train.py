@@ -1,8 +1,8 @@
 '''This module contains logic for training gene expression models in various ways'''
 
 import argparse
-import logging
 import numpy as np
+import os
 import random
 import sys
 import time
@@ -12,11 +12,12 @@ from torch.autograd import grad
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm_notebook
 
-import datasets
-import models
-import utils
+from whistl import datasets
+from whistl import models
+from whistl import utils
 
 
 def compute_irm_penalty(loss, dummy_w):
@@ -31,7 +32,7 @@ def compute_irm_penalty(loss, dummy_w):
 
 
 def train_with_irm(classifier, train_loaders, tune_loader, num_epochs, loss_scaling_factor,
-                   logger=None, save_file=None, burn_in_epochs=100):
+                   writer=None, save_file=None, burn_in_epochs=100):
     '''Train the provided classifier using invariant risk minimization
     IRM looks for features in the data that are invariant between different environments, as
     they are more likely to be predictive of true causal signals as opposed to spurious
@@ -59,8 +60,8 @@ def train_with_irm(classifier, train_loaders, tune_loader, num_epochs, loss_scal
         A dictionary mapping string labels like 'sepsis' to an encoded form like 0 or 1
     device: torch.device
         The device to train the model on (either a gpu or a cpu)
-    logger: logging.logger
-        The python logger object to handle printing logs
+    writer: torch.utils.tensorboard.SumarryWriter
+        A tensorboard writer to save results
     save_file: string or Path object
         The file to save the model to. If save_file is None, the model won't be saved
     burn_in_epochs: int
@@ -78,8 +79,8 @@ def train_with_irm(classifier, train_loaders, tune_loader, num_epochs, loss_scal
     # TODO make a function equivalent to utils.get_class_weights
     class_weights = {0: .9, 1: .1}
 
-    tune_label_counts, _ = utils.get_value_counts(tune_loader)
-    baseline = max(list(tune_label_counts.values())) / len(tune_dataset)
+    tune_label_counts, total_counts = utils.get_value_counts(tune_loader)
+    baseline = max(tune_label_counts.values()) / total_counts
 
     results = {'train_loss': [], 'tune_loss': [], 'train_acc': [], 'tune_acc': [],
                'baseline': baseline, 'train_penalty': [], 'train_raw_loss': []}
@@ -152,8 +153,8 @@ def train_with_irm(classifier, train_loaders, tune_loader, num_epochs, loss_scal
                         if epoch > burn_in_epochs:
                             torch.save(classifier, save_file)
 
-            tune_loss = tune_loss / len(tune_dataset)
-            tune_acc = tune_correct / len(tune_dataset)
+            tune_loss = tune_loss / total_counts
+            tune_acc = tune_correct / total_counts
             train_loss = train_loss / train_sample_count
             train_acc = train_correct / train_sample_count
             # We cast these to floats to avoid having to pickle entire Tensor objects
@@ -167,22 +168,21 @@ def train_with_irm(classifier, train_loaders, tune_loader, num_epochs, loss_scal
             results['train_penalty'].append(train_penalty)
             results['train_raw_loss'].append(train_raw_loss)
 
-            if logger is not None:
-                logger.info('Epoch {}'.format(epoch))
-                logger.info('Train loss: {}'.format(train_loss))
-                logger.info('Tune loss: {}'.format(tune_loss))
-                logger.info('Train accuracy: {}'.format(train_acc))
-                logger.info('Tune accuracy: {}'.format(tune_acc))
-                logger.info('Baseline accuracy: {}'.format(baseline))
+            if writer is not None:
+                writer.add_scalar('Loss/train', train_loss, epoch)
+                writer.add_scalar('Loss/tune', tune_loss, epoch)
+                writer.add_scalar('Acc/train', train_acc, epoch)
+                writer.add_scalar('Acc/tune', tune_acc, epoch)
+                if epoch == 0:
+                    writer.add_scalar('baseline', baseline, epoch)
 
     except Exception as e:
-        logger.error(e, exc_info=True)
+        print(e)
     finally:
-        results = utils.add_study_ids_to_results(results, train_dirs, tune_dirs)
         return results
 
 
-def train_multitask(train_loaders, tune_loaders, representation, heads, num_epochs, logger):
+def train_multitask(train_loaders, tune_loaders, representation, heads, num_epochs, writer=None):
     ''' Given a set of disease data loaders and disease model heads, do multitask training
     treating each disease as a task
 
@@ -200,8 +200,8 @@ def train_multitask(train_loaders, tune_loaders, representation, heads, num_epoc
         it to differentiate between disease and healthy samples
     num_epochs: int
         The number of epochs to train the model for
-    logger: logging.logger
-        The python logger object to handle printing logs
+    writer: torch.utils.tensorboard.SummaryWriter
+        A tensorboard writer to save results
 
     Returns
     -------
@@ -211,13 +211,13 @@ def train_multitask(train_loaders, tune_loaders, representation, heads, num_epoc
     for train_loader, tune_loader, head in zip(train_loaders, tune_loaders, heads):
         classifier = nn.Sequential(representation, head)
 
-        results = train_with_erm(classifier, train_loader, tune_loader, num_epochs, logger)
+        results = train_with_erm(classifier, train_loader, tune_loader, num_epochs, writer)
 
     # TODO combine results well
     return results
 
 
-def train_with_erm(classifier, train_loader, tune_loader, num_epochs, logger=None, save_file=None):
+def train_with_erm(classifier, train_loader, tune_loader, num_epochs, writer=None, save_file=None):
     ''' Train the provided classifier on the data from train_loader, evaluating the performance
     along the way with the data from tune_loader
 
@@ -231,8 +231,8 @@ def train_with_erm(classifier, train_loader, tune_loader, num_epochs, logger=Non
         The DataLoader containing tuning data
     num_epochs: int
         The number of times the model should be trained on all the data
-    logger: logging.logger
-        The python logger object to handle printing logs
+    writer: torch.utils.tensorboard.SummaryWriter
+        A tensorboard writer to save results
     save_file: string or Path object
         The file to save the model to. If save_file is None, the model won't be saved
 
@@ -249,8 +249,9 @@ def train_with_erm(classifier, train_loader, tune_loader, num_epochs, logger=Non
     class_weights = utils.get_class_weights(train_loader)
 
     # Calculate baseline tune set prediction accuracy (just pick the largest class)
-    tune_label_counts, _ = utils.get_value_counts(tune_loader)
-    baseline = max(list(tune_label_counts.values())) / len(tune_dataset)
+    tune_label_counts, total_counts = utils.get_value_counts(tune_loader)
+    _, num_train = utils.get_value_counts(train_loader)
+    baseline = max(list(tune_label_counts.values())) / total_counts
 
     results = {'train_loss': [], 'tune_loss': [], 'train_acc': [], 'tune_acc': [],
                'baseline': baseline}
@@ -310,26 +311,26 @@ def train_with_erm(classifier, train_loader, tune_loader, num_epochs, logger=Non
                         best_tune_loss = tune_loss
                         torch.save(classifier, save_file)
 
-            train_accuracy = train_correct / len(train_dataset)
-            tune_accuracy = tune_correct / len(tune_dataset)
+            train_accuracy = train_correct / num_train
+            tune_accuracy = tune_correct / total_counts
+            train_loss = train_loss / num_train
+            tune_loss = tune_loss / total_counts
 
-            if logger is not None:
-                logger.info('Epoch {}'.format(epoch))
-                logger.info('Train loss: {}'.format(train_loss / len(train_dataset)))
-                logger.info('Tune loss: {}'.format(tune_loss / len(tune_dataset)))
-                logger.info('Train accuracy: {}'.format(train_accuracy))
-                logger.info('Tune accuracy: {}'.format(tune_accuracy))
-                logger.info('Baseline accuracy: {}'.format(baseline))
+            if writer is not None:
+                writer.add_scalar('Loss/train', train_loss, epoch)
+                writer.add_scalar('Loss/tune', tune_loss, epoch)
+                writer.add_scalar('Acc/train', train_accuracy, epoch)
+                writer.add_scalar('Acc/tune', tune_accuracy, epoch)
+                if epoch == 0:
+                    writer.add_scalar('baseline', baseline, epoch)
 
-            results['train_loss'].append(train_loss / len(train_dataset))
-            results['tune_loss'].append(tune_loss / len(tune_dataset))
+            results['train_loss'].append(train_loss / num_train)
+            results['tune_loss'].append(tune_loss / total_counts)
             results['train_acc'].append(train_accuracy)
             results['tune_acc'].append(tune_accuracy)
     except Exception as e:
-        # Print error
-        logger.error(e, exc_info=True)
+        print(e)
     finally:
-        results = utils.add_study_ids_to_results(results, train_dirs, tune_dirs)
         return results
 
 
@@ -370,12 +371,11 @@ if __name__ == '__main__':
         # We'll use the default GPU, this will need to change later if using multiple GPUs
         device = torch.device('cuda')
 
-    # Set up a logger to write logs to
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger(__name__)
+    # Set up a SummaryWriter to write logs to
+    writer = SummaryWriter(os.path.join(__file__, os.pardir, 'logs/{}'.format(time.time())))
 
     if args.gene_file is None:
-        logger.error('A gene file is required for training without a compendium')
+        print('A gene file is required for training without a compendium')
         sys.exit()
 
     # set random seeds
@@ -421,7 +421,7 @@ if __name__ == '__main__':
         classifier = models.ThreeLayerNet(len(intersection_genes))
 
         results = train_with_irm(classifier, train_loaders, tune_loader, args.num_epochs,
-                                 args.loss_scaling_factor, logger)
+                                 args.loss_scaling_factor, writer)
 
     if mode == 'erm':
         disease_train_data_dirs = []
@@ -445,7 +445,7 @@ if __name__ == '__main__':
         tune_loader = DataLoader(tune_dataset, batch_size=16, num_workers=2, pin_memory=True)
 
         classifier = models.ThreeLayerNet(len(intersection_genes))
-        results = train_with_erm(classifier, train_loader, tune_loader, args.num_epochs, logger)
+        results = train_with_erm(classifier, train_loader, tune_loader, args.num_epochs, writer)
 
     if mode == 'multitask':
         train_loaders = []
@@ -477,4 +477,4 @@ if __name__ == '__main__':
             heads.append(head)
 
         results = train_multitask(train_loaders, tune_loaders, representation, heads,
-                                  args.num_epochs, logger)
+                                  args.num_epochs, writer)

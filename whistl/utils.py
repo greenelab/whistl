@@ -7,6 +7,84 @@ import random
 import numpy as np
 
 
+def filter_invalid_samples(sample_metadata: dict, sample_ids: list) -> dict:
+    '''Remove invalid samples from a list of sample accessions
+
+    Arguments
+    ---------
+    sample_metadata:
+        The 'samples' subtree of the metadata for the whole compendium
+    sample_ids:
+        The accessions for each gene expression sample
+
+    Returns
+    -------
+    valid_samples:
+        The samples that meet the filtering criteria
+    '''
+    valid_samples = []
+    # Remove beadchip samples (see https://github.com/AlexsLemonade/refinebio/issues/2114)
+    for sample in sample_ids:
+        if 'beadchip' not in sample_metadata[sample]['refinebio_platform'].lower():
+            valid_samples.append(sample)
+
+    return valid_samples
+
+
+def map_sample_to_platform(metadata_json: dict, sample_ids: list) -> dict:
+    '''Create a dict mapping each sample id to its corresponding gene expression measurement
+    platform
+
+    Arguments
+    ---------
+    metadata_json:
+        The metadata for the whole compendium
+    sample_ids:
+        The accessions for each sample
+
+    Returns
+    -------
+    sample_to_platform:
+        The mapping from sample accessions to the expression platform the sample was measured by
+    '''
+
+    sample_metadata = metadata_json['samples']
+
+    sample_to_platform = {}
+    for sample in sample_ids:
+        sample_to_platform[sample] = sample_metadata[sample]['refinebio_platform'].lower()
+
+    return sample_to_platform
+
+
+def map_sample_to_study(metadata_json: dict, sample_ids: list) -> dict:
+    '''Create a dict mapping each sample id to its corresponding gene expression measurement
+    platform
+
+    Arguments
+    ---------
+    metadata_json:
+        The metadata for the whole compendium
+    sample_ids:
+        The accessions for each sample
+
+    Returns
+    -------
+    sample_to_study:
+        The mapping from sample accessions to the study they are a member of
+    '''
+    experiments = metadata_json['experiments']
+    id_set = set(sample_ids)
+
+    sample_to_study = {}
+    for study in experiments:
+        for accession in experiments[study]['sample_accession_codes']:
+            if accession in id_set:
+                sample_to_study[accession] = study
+
+    return sample_to_study
+
+
 def count_items_in_dataloader(dataloader):
     '''Calculate the total number of items in a dataset by iterating through a dataloader
 

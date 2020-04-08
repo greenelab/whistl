@@ -8,9 +8,7 @@ import unittest
 
 import pytest
 
-whistl_path = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(whistl_path + '/../whistl')
-import datasets
+from whistl import datasets
 
 
 example_metadata = json.loads('''{"experiments": {"GSE14844": {"sample_accession_codes": [
