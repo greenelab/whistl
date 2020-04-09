@@ -405,7 +405,7 @@ def parse_gene_file(gene_file_path):
     return genes
 
 
-def get_class_weights(train_loader):
+def get_class_weights(train_loaders):
     '''Calculate class weights for better training performance on unbalanced data
 
     Arguments
@@ -418,12 +418,24 @@ def get_class_weights(train_loader):
     weights: dict
         A dictionary mapping encoded labels to weights
     '''
-    value_counts, total = get_value_counts(train_loader)
-
-    # Weight labels according to the inverse of their frequency
     weights = {}
-    for label in value_counts:
-        weights[label] = 1 - value_counts[label] / total
+    if type(train_loaders) == list:
+        total_count = 0
+        all_value_counts = {}
+        for train_loader in train_loaders:
+            value_counts, total = get_value_counts(train_loader)
+            total_count += total
+            for label in value_counts:
+                all_value_counts[label] = all_value_counts.get(label, 0) + value_counts[label]
+
+        for label in all_value_counts:
+            weights[label] = 1 - all_value_counts[label] / total_count
+    else:
+        value_counts, total = get_value_counts(train_loaders)
+
+        # Weight labels according to the inverse of their frequency
+        for label in value_counts:
+            weights[label] = 1 - value_counts[label] / total
 
     return weights
 

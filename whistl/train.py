@@ -76,8 +76,7 @@ def train_with_irm(classifier, train_loaders, tune_loader, num_epochs, loss_scal
     classifier.to(device)
     optimizer = optim.Adam(classifier.parameters(), lr=1e-5)
 
-    # TODO make a function equivalent to utils.get_class_weights
-    class_weights = {0: .9, 1: .1}
+    class_weights = utils.get_class_weights(train_loaders)
 
     tune_label_counts, total_counts = utils.get_value_counts(tune_loader)
     baseline = max(tune_label_counts.values()) / total_counts
