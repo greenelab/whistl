@@ -169,7 +169,3 @@ dependencies:
   - zipp=0.6.0
   - zlib=1.2.11
   - zstd=1.3.7
-  - pip:
-    - python-graphviz==0.13
-    - torchviz==0.0.1
-
