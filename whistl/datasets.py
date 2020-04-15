@@ -500,8 +500,8 @@ def subset_expression_by_platform(expression_df, platforms, sample_to_platform):
 class CompendiumDataset(Dataset):
     '''A dataset of one or more studies pulled from the refine.bio human compendium'''
 
-    def __init__(self, groups, classes, sample_to_label, metadata_path, compendium_path, encoder,
-                 mode='study'):
+    def __init__(self, groups, classes, sample_to_label, metadata_path,
+                 compendium_path, encoder, mode='study'):
         '''Initialize a CompendiumDataset object
 
         Arguments
