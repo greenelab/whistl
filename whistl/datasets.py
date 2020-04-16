@@ -3,12 +3,13 @@ decoupling the data access, and model training portions of the code'''
 import functools
 import json
 import os
+import sys
 
 import numpy as np
 import pandas as pd
 from torch.utils.data import Dataset
 
-import utils
+from whistl import utils
 
 
 def get_labels_for_expression_df(df, sample_to_label, encoder):
@@ -337,18 +338,6 @@ def get_dataframe_from_dirs(data_dirs, classes, sample_to_label, genes_to_use):
     return selected_studies_df, labels
 
 
-def get_dataframe_from_compendium():
-    '''
-
-    Arguments
-    ---------
-
-    Returns
-    -------
-    '''
-    raise NotImplementedError
-
-
 def parse_study_dir(data_dir, sample_to_label, label_to_encoding, genes_to_keep):
     '''This function extracts the gene expression data and labels for a single study
 
@@ -442,16 +431,84 @@ class RefineBioDataset(Dataset):
         return len(self.labels)
 
 
+def create_sample_to_platform_mapping(metadata):
+    '''Generate a dictionary mapping each sample to the platform that generated it
+
+    Arguments
+    ---------
+    metadata: json
+        A json object containing the metadata for a study
+
+    Returns
+    -------
+    sample_to_platform: dict
+        A dictionary mapping each sample accession to the platform used to sequence the sample
+    '''
+    sample_to_platform = {}
+
+    experiment_metadata = metadata['experiments']
+    sample_metadata = metadata['samples']
+
+    sample_list = []
+    for experiment in experiment_metadata:
+        try:
+            experiment_samples = experiment_metadata[experiment]['sample_accession_codes']
+            sample_list.extend(experiment_samples)
+        except KeyError as e:
+            # If an experiment doesn't have any samples for some reason, skip it
+            print(e)
+            pass
+
+
+    for sample in sample_list:
+        sample_to_platform[sample] = sample_metadata[sample]['refinebio_platform'].lower()
+
+    return sample_to_platform
+
+
+def subset_expression_by_platform(expression_df, platforms, sample_to_platform):
+    '''Subset a dataframe to contain only the samples produced by the given platform(s)
+
+    Arguments
+    ---------
+    expression_df: pandas Dataframe
+        A dataframe where the rows are genes and the columns are sample
+    platforms: list of str
+        A list of the platforms whose samples should be kept
+    sample_to_platform: dict
+        A dict mapping sample accessions to their corresponding platforms
+
+    Returns
+    -------
+    subset_df: pandas DataFrame
+        The subset of the dataframe passed in containing only samples from the given studies
+    '''
+    platform_set = set(platforms)
+    samples_to_keep = []
+
+    all_samples = expression_df.columns
+
+    for sample in all_samples:
+        if sample_to_platform[sample] in platform_set:
+            samples_to_keep.append(sample)
+
+    subset_df = expression_df.loc[:, samples_to_keep]
+
+    return subset_df
+
+
 class CompendiumDataset(Dataset):
     '''A dataset of one or more studies pulled from the refine.bio human compendium'''
 
-    def __init__(self, studies, classes, sample_to_label, metadata_path, compendium_path, encoder):
+    def __init__(self, groups, classes, sample_to_label, metadata_path,
+                 compendium_path, encoder, mode='study'):
         '''Initialize a CompendiumDataset object
 
         Arguments
         ---------
-        studies: list of str
-            The accessions of studies to be included in the dataset
+        groups: list of str
+            The groups of samples to be included. Can be either a list of studies or platforms
+            depending on the value of the mode parameter
         classes: list of str
             The phenotypes to be included in the dataset
         sample_to_label: dict
@@ -461,14 +518,26 @@ class CompendiumDataset(Dataset):
         compendium_path: str or Path object
             The path to the tsv containing gene expression data
         encoder: sklearn.preprocessing.LabelEncoder
-            An encoder object that maps phenotype names to labels
+            An encoder object that has already been fit to map phenotype names to labels
+        mode: str
+            Either 'study' or 'platform' denoting what is stored in the groups parameter
         '''
 
         metadata = parse_metadata_file(metadata_path)
-        sample_to_study = create_sample_to_study_mapping(metadata)
-
         all_data = load_compendium_file(compendium_path)
-        data = subset_expression_by_study(all_data, studies, sample_to_study)
+
+        sample_ids = sample_to_label.keys()
+
+        if mode == 'study':
+            sample_to_study = create_sample_to_study_mapping(metadata)
+            data = subset_expression_by_study(all_data, groups, sample_to_study)
+        elif mode == 'platform':
+            sample_to_platform = utils.map_sample_to_platform(metadata, sample_ids)
+            data = subset_expression_by_platform(all_data, groups, sample_to_platform)
+        else:
+            print("Valid modes are 'study' and 'platform'")
+            sys.exit(1)
+
         data = subset_expression_by_class(data, classes, sample_to_label)
         labels = get_labels_for_expression_df(data, sample_to_label, encoder)
 
