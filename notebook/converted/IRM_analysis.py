@@ -18,6 +18,7 @@ import itertools
 import json
 import os
 import sys
+from pathlib import Path
 
 import pandas as pd
 import sklearn.metrics as metrics
@@ -39,6 +40,9 @@ from whistl import utils
 
 import random
 import numpy as np
+torch.manual_seed(42)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
 np.random.seed(42)
 random.seed(42)
 
@@ -46,13 +50,13 @@ random.seed(42)
 # In[3]:
 
 
-curr_path = os.path.dirname(os.path.abspath(os.path.abspath('')))
+curr_path = str(Path('.'))
 
-map_file = os.path.join(curr_path, os.pardir, 'data', 'sample_classifications.pkl')
+map_file = str(Path('../../data/sample_classifications.pkl'))
 sample_to_label = utils.parse_map_file(map_file)
 sample_ids = sample_to_label.keys()
 
-metadata_file = os.path.join(curr_path, os.pardir, 'data', 'all_metadata.json')
+metadata_file = str(Path('../../data/all_metadata.json'))
 metadata_json = json.load(open(metadata_file))
 sample_metadata = metadata_json['samples']
 
@@ -65,7 +69,7 @@ sample_to_study = utils.map_sample_to_study(metadata_json, sample_ids)
 # In[4]:
 
 
-compendium_path = os.path.join(curr_path, os.pardir, 'data', 'subset_compendium.tsv')
+compendium_path = str(Path('../../data/subset_compendium.tsv'))
 
 compendium_df = datasets.load_compendium_file(compendium_path)
 compendium_df.head()
@@ -121,20 +125,18 @@ sepsis_metadata_df['study'].value_counts()
 # ## IRM Evaluation
 
 # ### Setup
-# This code is unnecessary, as the variables are already initialized in the EDA section.
-# It is included here for the sake of clarity for people who skip to the analysis
 
 # In[11]:
 
 
 curr_path = os.path.dirname(os.path.abspath(os.path.abspath('')))
 
-map_file = os.path.join(curr_path, os.pardir, 'data', 'sample_classifications.pkl')
+map_file = str(Path('../../data/sample_classifications.pkl'))
 sample_to_label = utils.parse_map_file(map_file)
 
-metadata_path = os.path.join(curr_path, os.pardir, 'data', 'all_metadata.json')
+metadata_path = str(Path('../../data/all_metadata.json'))
 
-compendium_path = os.path.join(curr_path, os.pardir, 'data', 'subset_compendium.tsv')
+compendium_path = str(Path('../../data/subset_compendium.tsv'))
 
 
 # ### More setup
@@ -160,7 +162,9 @@ print(len(tune_df.index))
 print(len(train_df.index))
 
 tune_studies = tune_df['study'].unique()
-tune_dataset = CompendiumDataset(tune_studies, classes, sample_to_label, metadata_path, compendium_path, encoder)
+tune_dataset = CompendiumDataset(tune_studies, classes, 
+                                 sample_to_label, metadata_path, 
+                                 compendium_path, encoder)
 tune_loader = DataLoader(tune_dataset, batch_size=1)
 
 
@@ -171,17 +175,25 @@ tune_loader = DataLoader(tune_dataset, batch_size=1)
 
 
 platforms = train_df['platform'].unique()
-platforms = [p for p in platforms if p != 'affymetrix human human exon 1.0 st array (huex10st)']
+platforms = [p 
+             for p in platforms 
+             if p != 'affymetrix human human exon 1.0 st array (huex10st)'
+            ]
+num_seeds = 5
 
 
-# ### Train loop
+# ## Training
+# 
+# The models are trained with two platforms held out. 
+# One platform (huex10st) is left out in all runs, and is used as a tuning set to determine which version of the model should be saved.
+# The second platform (referred to going forward as the 'held-out platform') is held out during training, then the trained model's performance is evaluated by trying to predict whether each sample corresponds to sepsis or healthy expression.
 
 # In[15]:
 
 
 irm_result_list = []
 erm_result_list = []
-num_seeds = 5
+
 
 for hold_out_platform in platforms:
     train_platforms = train_df[train_df['platform'] != hold_out_platform]['platform'].unique()
@@ -208,27 +220,34 @@ for hold_out_platform in platforms:
     assert total_irm_samples == len(full_train_dataset)
     
     for seed in range(num_seeds):
-        print(hold_out_platform, seed)
         np.random.seed(seed)
         random.seed(seed)
+        torch.manual_seed(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        
         net = models.ThreeLayerNet(len(compendium_df.index))
-        writer = SummaryWriter(os.path.join(curr_path, 
-                                            os.pardir, 
-                                            'logs', 
-                                            'erm_analysis_{}_{}.tfrecord'.format(platform_file, seed)))
+        
+        writer_path = Path('./logs/erm_analysis_{}_{}.tfrecord'.format(platform_file, seed))
+        writer = SummaryWriter(writer_path)
 
-        save_file = os.path.join(curr_path, os.pardir, 'logs', 'erm_analysis_{}_{}.pkl'.format(platform_file, seed))
-        results = train.train_with_erm(net, full_train_loader, tune_loader, num_epochs=400, 
+        save_file = Path('./logs/erm_analysis_{}_{}.pkl'.format(platform_file, seed))
+        results = train.train_with_erm(net, full_train_loader, 
+                                       tune_loader, num_epochs=400, 
                                        save_file=save_file, writer=writer)
         erm_result_list.append(results)
 
         net = models.ThreeLayerNet(len(compendium_df.index))
-        writer = SummaryWriter(os.path.join(curr_path, os.pardir, 'logs', 
-                                            'irm_analysis_{}_{}.tfrecord'.format(platform_file, seed)))
+        
+        writer_path = Path('./logs/irm_analysis_{}_{}.tfrecord'.format(platform_file, seed))
+        writer = SummaryWriter(writer_path)
 
-        save_file = os.path.join(curr_path, os.pardir, 'logs', 'irm_analysis_{}_{}.pkl'.format(platform_file, seed))
-        results = train.train_with_irm(net, train_loaders, tune_loader, num_epochs=400, 
-                                       loss_scaling_factor=1, save_file=save_file, writer=writer, burn_in_epochs=0)
+        
+        save_file = Path('./logs/irm_analysis_{}_{}.pkl'.format(platform_file, seed))
+        results = train.train_with_irm(net, train_loaders, 
+                                       tune_loader, num_epochs=400, 
+                                       loss_scaling_factor=1, save_file=save_file, 
+                                       writer=writer, burn_in_epochs=0)
         irm_result_list.append(results)
 
 
@@ -269,7 +288,7 @@ for hold_out_platform in platforms:
 
             # Load IRM model
             platform_file = hold_out_platform.split('(')[-1].strip(')')
-            save_file = os.path.join(curr_path, os.pardir, 'logs', 'irm_analysis_{}_{}.pkl'.format(platform_file, seed))
+            save_file = Path('./logs/irm_analysis_{}_{}.pkl'.format(platform_file, seed))
             net = torch.load(save_file, 'cuda')
 
             #Evaluate ERM model
@@ -277,7 +296,7 @@ for hold_out_platform in platforms:
             irm_f1_scores.append(f1_score)
 
             # Load ERM model
-            save_file = os.path.join(curr_path, os.pardir, 'logs', 'erm_analysis_{}_{}.pkl'.format(platform_file, seed))
+            save_file = Path('./logs/erm_analysis_{}_{}.pkl'.format(platform_file, seed))
             net = torch.load(save_file, 'cuda')
 
             # Evaluate IRM model
@@ -304,19 +323,26 @@ label_list = (['irm'] + ['erm']) *  (len(score_list) // 2)
 print(label_list)
 
 
-# In[19]:
+# In[29]:
 
 
+held_out_platform_list = [plat.split('(')[-1].strip(')') for plat in held_out_platform_list]
 result_dict = {'f1_score': score_list, 'irm/erm': label_list, 'held_out_platform': held_out_platform_list}
 result_df = pd.DataFrame(result_dict)
 result_df.head()
 
 
-# In[20]:
+# ## Results
+# 
+# The first figures measure the models' performance on the held out platform. These figures measure the model's ability to generalize.
+# 
+# The second set of figures measure the models' performance no the tuning set to measure the model's training behavior (and to a lesser extend the models' ability to predict a held-out set). 
+
+# In[30]:
 
 
 (ggplot(result_df, aes('irm/erm', 'f1_score', color='held_out_platform')) +
- geom_jitter(size=2) +
+ geom_jitter(size=3) +
  ggtitle('F1 Score on held-out platform')
 )
 
@@ -330,7 +356,7 @@ result_df.head()
 )
 
 
-# In[22]:
+# In[38]:
 
 
 irm_accs = [result['tune_acc'] for result in irm_result_list]
@@ -339,9 +365,10 @@ print(irm_mean_accs)
 [acc.sort() for acc in irm_accs]
 irm_median_accs = [acc[len(acc) //2] for acc in irm_accs]
 print(irm_median_accs)
+irm_max_accs = [max(accs) for accs in irm_accs]
 
 
-# In[23]:
+# In[39]:
 
 
 erm_accs = [result['tune_acc'] for result in erm_result_list]
@@ -350,35 +377,39 @@ print(erm_mean_accs)
 [acc.sort() for acc in erm_accs]
 erm_median_accs = [acc[len(acc) //2] for acc in erm_accs]
 print(erm_median_accs)
+erm_max_accs = [max(accs) for accs in erm_accs]
 
 
-# In[24]:
+# In[40]:
 
 
 mean_list = list(itertools.chain(*zip(irm_mean_accs, erm_mean_accs)))
 median_list = list(itertools.chain(*zip(irm_median_accs, erm_median_accs)))
+max_list = list(itertools.chain(*zip(irm_max_accs, erm_max_accs)))
 label_list = (['irm'] + ['erm']) *  (len(mean_list) // 2)
 
 held_out_platform_list = []
 for platform in platforms:
-    p = [platform] * 2 * num_seeds
+    plat = platform.split('(')[-1].strip(')')
+    p = [plat] * 2 * num_seeds
     held_out_platform_list.extend(p)
+held_out_platform_list = [plat.split('(')[-1].strip(')') for plat in held_out_platform_list]
 
-result_dict = {'mean_acc': mean_list, 'median_acc': median_list, 'irm/erm': label_list, 
+result_dict = {'mean_acc': mean_list, 'median_acc': median_list, 'max_acc': max_list, 'irm/erm': label_list, 
                'held_out_platform': held_out_platform_list}
 result_df = pd.DataFrame(result_dict)
 
 
-# In[25]:
+# In[32]:
 
 
 (ggplot(result_df, aes('irm/erm', 'mean_acc', color='held_out_platform')) + 
- geom_jitter() +
+ geom_jitter(size=3) +
  ggtitle('Mean accuracies in IRM and ERM on tune set')
 )
 
 
-# In[26]:
+# In[33]:
 
 
 (ggplot(result_df, aes('irm/erm', 'mean_acc')) + 
@@ -387,11 +418,15 @@ result_df = pd.DataFrame(result_dict)
 )
 
 
-# In[27]:
+# ### Median accuracies
+# IRM is somewhat unstable during training, and will occasionally have sudden spikes of poor performance.
+# Since we save the best version of the model based on the model's loss, it makes more sense to look at the median accuracy than the mean as a measure of central tendency
+
+# In[34]:
 
 
 (ggplot(result_df, aes('irm/erm', 'median_acc', color='held_out_platform')) + 
-geom_jitter() +
+geom_jitter(size=3) +
 ggtitle('Median accuracies in ERM and IRM on tune set')
 )
 
@@ -403,4 +438,21 @@ ggtitle('Median accuracies in ERM and IRM on tune set')
 geom_violin() +
 ggtitle('Median accuracies in ERM and IRM on tune set')
 )
+
+
+# ## Max accuracies
+
+# In[43]:
+
+
+(ggplot(result_df, aes('irm/erm', 'max_acc', color='held_out_platform')) + 
+geom_point(size=3) +
+ggtitle('Max accuracies in ERM and IRM on tune set')
+)
+
+
+# In[ ]:
+
+
+
 
