@@ -4,6 +4,8 @@
 # # IRM Analysis
 # This notebook will compare the performance of IRM on an unseen platform's worth of gene expression to that of ERM. These results will be used for the preliminary data section for Aim 2 in my prelim proposal.
 # 
+# For more information on what IRM and ERM are, read [Invariant Risk Minimization by Arjovsky et al.](https://arxiv.org/abs/1907.02893)
+# 
 # The EDA code is [here](#EDA), or to skip to the analysis, go [here](#eval)
 
 # <a id='eda'></a>

@@ -11,6 +11,7 @@ import collections
 import json
 import os
 import pickle
+from typing import Text, Dict, Union
 
 import pandas as pd
 
@@ -39,9 +40,16 @@ with open(metadata_path) as json_file:
 # In[4]:
 
 
-def get_tissue(sample_metadata, sample):
-    '''Take a sample as input and return the tissue if that information is 
-       present, otherwise return None
+def get_tissue(sample_metadata: Dict, sample: Text) -> Union[Text, None]:
+    '''Extract the tissue type for the given sample from the metadata
+       
+       Arguments:
+       sample_metadata: A dictionary containing metadata about all samples in the dataset
+       sample: The sample id
+       
+       Returns:
+       A string containing the tissue, if thatt information is present.
+       Otherwise returns None
     '''
     try:
         characteristics = sample_metadata[sample]['refinebio_annotations'][0]['characteristics_ch1']
@@ -139,9 +147,7 @@ blood_counts = dict((k, tissue_counts[k]) for k in keys_to_keep)
 # In[10]:
 
 
-total_samples = 0
-for key in blood_counts:
-    total_samples += blood_counts[key]
+total_samples = sum(blood_counts.values())
 total_samples
 
 
@@ -151,32 +157,31 @@ total_samples
 # In[11]:
 
 
-labeled_samples = sample_to_label.keys()
+labeled_samples = set(sample_to_label.keys())
 print(len(labeled_samples))
-other_samples = label_to_sample['other']
+
+# The label 'other' is given to samples whose disease or healthy
+# status could not be determined
+other_samples = set(label_to_sample['other'])
 print(len(other_samples))
-labeled_samples = [sample for sample in labeled_samples if sample not in other_samples]
+# Set difference
+labeled_samples = labeled_samples - other_samples
 print(len(labeled_samples))
 
 
-# In[12]:
+# In[13]:
 
 
 unlabeled_samples = []
 
 for sample in sample_metadata:
     tissue = get_tissue(sample_metadata, sample)
-    if (tissue is not None and tissue in keys_to_keep 
-                           and sample not in labeled_samples
-       ):
+    if tissue in keys_to_keep and sample not in labeled_samples:
         unlabeled_samples.append(sample)
 
-print(len(unlabeled_samples))
-print(len(labeled_samples))
-        
-# Get samples corresponding to blood
-# Find the intersection and disjunction of the sets
+print('{} samples unlabeled'.format(len(unlabeled_samples)))
+print('{} samples labeled'.format(len(labeled_samples)))
 
 
 # ## Conclusion
-# There is a large number of blood samples that don't have labels. These samples can be used for semi-supervised learning, and the number of samples is large enough to make it worth trying.
+# There is a large number of blood samples that don't have labels. These samples can be used for semi-supervised learning, and the number of unlabeled samples is large enough to make it worth trying.
